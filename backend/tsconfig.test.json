@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "isolatedModules": true,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*", "tests/**/*", "hardhat-env.ts"]
+}
