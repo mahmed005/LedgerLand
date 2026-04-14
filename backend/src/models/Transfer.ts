@@ -8,9 +8,11 @@ const transferSchema = new Schema(
     buyerCnic: { type: String, required: true },
     status: {
       type: String,
-      enum: ["pending_nadra", "completed", "cancelled"],
+      enum: ["pending_nadra", "completed", "cancelled", "nadra_failed"],
       default: "pending_nadra",
     },
+    /** ISO timestamp set when the buyer explicitly approves the pending transfer. */
+    buyerApprovedAt: { type: String, default: null },
     sellerNadraVerified: { type: Boolean, default: false },
     buyerNadraVerified: { type: Boolean, default: false },
     createdAt: { type: String, required: true },

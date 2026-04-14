@@ -1,16 +1,19 @@
 import { Router, type RequestHandler } from "express";
 import type { AuthService } from "./authService.js";
+import type { AuditService } from "../services/auditService.js";
 
 /**
  * Mounts citizen authentication under `/api/auth` (signup, login, session).
  *
  * @param auth - Business logic for credentials and tokens.
  * @param requireAuth - Middleware enforcing a valid JWT.
+ * @param audit - Optional audit logger (successful logins are recorded when provided).
  * @returns Express router for `/signup`, `/login`, `/me`.
  */
 export function createAuthRouter(
   auth: AuthService,
   requireAuth: RequestHandler,
+  audit?: AuditService,
 ): Router {
   const router = Router();
 
@@ -66,6 +69,11 @@ export function createAuthRouter(
         return;
       }
       const result = await auth.login({ cnic, password });
+      await audit?.record({
+        action: "auth.login",
+        actorUserId: result.user.id,
+        actorCnic: result.user.cnic,
+      });
       res.json(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "UNKNOWN";

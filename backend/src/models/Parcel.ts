@@ -23,6 +23,8 @@ const parcelSchema = new Schema(
     /** Relative path under {@link UPLOADS_DIR}, e.g. `<parcelId>/fard.txt`. */
     fardRelativePath: { type: String, default: null },
     registryRelativePath: { type: String, default: null },
+    /** Optional mutation document (plain text), e.g. `<parcelId>/mutation.txt`. */
+    mutationRelativePath: { type: String, default: null },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
   },

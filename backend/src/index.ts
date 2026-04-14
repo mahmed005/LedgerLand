@@ -5,6 +5,8 @@ import { createApp } from "./app.js";
 import {
   ADMIN_BOOTSTRAP_CNIC,
   ADMIN_BOOTSTRAP_PASSWORD,
+  JUDGE_BOOTSTRAP_CNIC,
+  JUDGE_BOOTSTRAP_PASSWORD,
   JWT_EXPIRES_SEC,
   JWT_SECRET,
   LEDGER_CONTRACT_ADDRESS,
@@ -16,9 +18,13 @@ import {
 } from "./config/env.js";
 import { connectMongo } from "./db/connect.js";
 import { UserModel } from "./models/User.js";
+import { ParcelModel } from "./models/Parcel.js";
+import { AuditLogModel } from "./models/AuditLog.js";
 import { createEthLedgerFromEnv } from "./ledger/ethLedgerService.js";
 import { ParcelService } from "./services/parcelService.js";
 import { TransferService } from "./services/transferService.js";
+import { AuditService } from "./services/auditService.js";
+import { NotificationService } from "./services/notificationService.js";
 
 /**
  * Connects to MongoDB, ensures upload directories exist, wires services, and starts HTTP.
@@ -38,6 +44,8 @@ async function bootstrap(): Promise<void> {
 
   await connectMongo(MONGODB_URI);
   await UserModel.syncIndexes();
+  await ParcelModel.syncIndexes();
+  await AuditLogModel.syncIndexes();
 
   const ledger = createEthLedgerFromEnv(RPC_URL, LEDGER_CONTRACT_ADDRESS, LEDGER_SIGNER_PRIVATE_KEY);
   const userRepository = new MongoUserRepository();
@@ -45,8 +53,11 @@ async function bootstrap(): Promise<void> {
     jwtSecret: JWT_SECRET,
     jwtExpiresSec: JWT_EXPIRES_SEC,
   });
+  const auditService = new AuditService();
+  const notificationService = new NotificationService(userRepository);
 
   await authService.registerBootstrapAdmin(ADMIN_BOOTSTRAP_CNIC, ADMIN_BOOTSTRAP_PASSWORD);
+  await authService.registerBootstrapJudge(JUDGE_BOOTSTRAP_CNIC, JUDGE_BOOTSTRAP_PASSWORD);
 
   const parcelService = new ParcelService(UPLOADS_DIR);
   const transferService = new TransferService(ledger);
@@ -56,6 +67,8 @@ async function bootstrap(): Promise<void> {
     authService,
     parcelService,
     transferService,
+    auditService,
+    notificationService,
   });
 
   app.listen(PORT, () => {

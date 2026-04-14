@@ -114,6 +114,35 @@ export class AuthService {
   }
 
   /**
+   * Creates a single **judge** account when bootstrap env credentials are set and the CNIC is unused.
+   * Grants access to authenticated **`/api/court/*`** read APIs.
+   *
+   * @param cnic - Raw or formatted CNIC.
+   * @param password - Account password (minimum length rules apply).
+   * @param fullName - Display label for demos.
+   */
+  async registerBootstrapJudge(cnic: string, password: string, fullName = "Court Officer"): Promise<void> {
+    const normalized = normalizeCnic(cnic);
+    if (!isValidCnic(normalized) || password.length < MIN_PASSWORD_LENGTH) {
+      return;
+    }
+    if (await this.users.findByCnic(normalized)) {
+      return;
+    }
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const user: StoredUser = {
+      id: randomUUID(),
+      cnic: normalized,
+      email: null,
+      passwordHash,
+      fullName,
+      role: "judge",
+      createdAt: new Date().toISOString(),
+    };
+    await this.users.create(user);
+  }
+
+  /**
    * Validates credentials and returns a signed JWT plus public profile.
    *
    * @param input - Login credentials (CNIC + password).

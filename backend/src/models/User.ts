@@ -7,7 +7,7 @@ const userSchema = new Schema(
     email: { type: String, required: false, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     fullName: { type: String, required: true, trim: true },
-    role: { type: String, enum: ["citizen", "admin"], default: "citizen" },
+    role: { type: String, enum: ["citizen", "admin", "judge"], default: "citizen" },
     createdAt: { type: String, required: true },
   },
 );

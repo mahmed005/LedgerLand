@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import type { ParcelService } from "../services/parcelService.js";
+import type { AuditService } from "../services/auditService.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
 
 /**
@@ -8,9 +9,14 @@ import { requireAdmin } from "../middleware/requireAdmin.js";
  *
  * @param parcels - Parcel service.
  * @param requireAuth - JWT middleware (runs before {@link requireAdmin}).
+ * @param audit - Optional audit trail for administrative writes.
  * @returns Router mounted at `/api/admin`.
  */
-export function createAdminRouter(parcels: ParcelService, requireAuth: RequestHandler): Router {
+export function createAdminRouter(
+  parcels: ParcelService,
+  requireAuth: RequestHandler,
+  audit?: AuditService,
+): Router {
   const router = Router();
   router.use(requireAuth);
   router.use(requireAdmin);
@@ -49,6 +55,13 @@ export function createAdminRouter(parcels: ParcelService, requireAuth: RequestHa
         disputed: Boolean(b.disputed),
         fardText: typeof b.fardText === "string" ? b.fardText : undefined,
         registryText: typeof b.registryText === "string" ? b.registryText : undefined,
+        mutationText: typeof b.mutationText === "string" ? b.mutationText : undefined,
+      });
+      await audit?.record({
+        action: "admin.parcel_created",
+        actorUserId: req.user!.id,
+        actorCnic: req.user!.cnic,
+        metadata: { parcelId: created.id },
       });
       res.status(201).json({ parcel: created });
     } catch (err) {
@@ -58,6 +71,36 @@ export function createAdminRouter(parcels: ParcelService, requireAuth: RequestHa
         return;
       }
       res.status(500).json({ error: "Failed to create parcel" });
+    }
+  });
+
+  /**
+   * **`PATCH /api/admin/parcels/:parcelId`**
+   *
+   * Updates mutable officer fields. Currently supports `{ "disputed": boolean }` to flag or clear disputes
+   * on an **existing** parcel.
+   */
+  router.patch("/parcels/:parcelId", async (req, res) => {
+    try {
+      if (!req.body || typeof req.body.disputed !== "boolean") {
+        res.status(400).json({ error: "disputed boolean is required" });
+        return;
+      }
+      const updated = await parcels.updateDisputed(req.params.parcelId, req.body.disputed);
+      if (!updated) {
+        res.status(404).json({ error: "Parcel not found" });
+        return;
+      }
+      await audit?.record({
+        action: "admin.parcel_updated",
+        actorUserId: req.user!.id,
+        actorCnic: req.user!.cnic,
+        metadata: { parcelId: updated.id, disputed: updated.disputed },
+      });
+      res.json({ parcel: updated });
+    } catch (err) {
+      void err;
+      res.status(500).json({ error: "Failed to update parcel" });
     }
   });
 

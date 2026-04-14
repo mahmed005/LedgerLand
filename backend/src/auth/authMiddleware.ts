@@ -32,3 +32,26 @@ export function createAuthMiddleware(auth: AuthService) {
     }
   };
 }
+
+/**
+ * Parses `Authorization: Bearer` when present and sets `req.user`; continues without error if the header is missing or invalid.
+ * Used for **RBAC-aware** public routes (e.g. parcel search) where anonymous access is allowed but with redacted fields.
+ *
+ * @param auth - Service used to verify tokens.
+ */
+export function createOptionalAuthMiddleware(auth: AuthService) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    const header = req.headers.authorization;
+    if (!header?.startsWith("Bearer ")) {
+      next();
+      return;
+    }
+    const token = header.slice("Bearer ".length).trim();
+    try {
+      req.user = await auth.verifyAccessToken(token);
+    } catch {
+      req.user = undefined;
+    }
+    next();
+  };
+}

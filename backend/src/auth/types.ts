@@ -1,7 +1,7 @@
 /**
- * Application role for authorization (government officers use `admin` in the MVP).
+ * Application role for authorization (`admin` = land-record officer; `judge` = court read-only API).
  */
-export type UserRole = "citizen" | "admin";
+export type UserRole = "citizen" | "admin" | "judge";
 
 /**
  * Persisted account (password hash only; never return the hash from APIs).

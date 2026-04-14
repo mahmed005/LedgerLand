@@ -47,6 +47,8 @@ npm start
 | `UPLOADS_DIR` | Parcel document root | `<cwd>/uploads` |
 | `ADMIN_BOOTSTRAP_CNIC` | Optional 13-digit CNIC | — |
 | `ADMIN_BOOTSTRAP_PASSWORD` | Password for bootstrap admin | — |
+| `JUDGE_BOOTSTRAP_CNIC` | Optional 13-digit CNIC for a **`judge`** account (court read API) | — |
+| `JUDGE_BOOTSTRAP_PASSWORD` | Password paired with `JUDGE_BOOTSTRAP_CNIC` | — |
 
 Place a `.env` file in `backend/` (see earlier notes on loading via shell or `node --env-file`).
 
@@ -91,10 +93,12 @@ GET /api/parcels/search?ownerCnic=35201-1111111-1
       "plotNumber": "P-42",
       "khasra": "",
       "currentOwnerCnic": "3520111111111",
+      "currentOwnerFullName": "Ali Khan",
       "disputed": false,
       "ownershipHistory": [
         {
           "ownerCnic": "3520111111111",
+          "ownerFullName": "Ali Khan",
           "acquiredAt": "2026-04-12T10:00:00.000Z",
           "transferId": null,
           "note": "Initial record"
@@ -102,6 +106,7 @@ GET /api/parcels/search?ownerCnic=35201-1111111-1
       ],
       "hasFard": true,
       "hasRegistry": true,
+      "hasMutation": false,
       "createdAt": "2026-04-12T10:00:00.000Z",
       "updatedAt": "2026-04-12T10:00:00.000Z"
     }
@@ -170,10 +175,12 @@ GET /api/parcels/search?ownerCnic=35201-1111111-1
     "plotNumber": "P-42",
     "khasra": "",
     "currentOwnerCnic": "3520111111111",
+    "currentOwnerFullName": null,
     "disputed": false,
     "ownershipHistory": [
       {
         "ownerCnic": "3520111111111",
+        "ownerFullName": null,
         "acquiredAt": "2026-04-12T10:00:00.000Z",
         "transferId": null,
         "note": "Initial record"
@@ -181,6 +188,7 @@ GET /api/parcels/search?ownerCnic=35201-1111111-1
     ],
     "hasFard": true,
     "hasRegistry": false,
+    "hasMutation": false,
     "createdAt": "2026-04-12T10:00:00.000Z",
     "updatedAt": "2026-04-12T10:00:00.000Z"
   }
@@ -195,7 +203,36 @@ Unknown id → `404` JSON: `{ "error": "No record found for this parcel id." }`
 { "transferId": "uuid-of-transfer", "status": "pending_nadra" }
 ```
 
-**`POST /api/transfers/:transferId/simulate-nadra`** — header `Authorization: Bearer <token>` (seller or buyer) → `200`
+**`GET /api/transfers/:transferId`** — header `Authorization: Bearer <token>` (seller **or** buyer) → `200`
+
+```json
+{
+  "transfer": {
+    "transferId": "uuid",
+    "parcelId": "uuid",
+    "sellerCnic": "3520111111111",
+    "buyerCnic": "3520222222222",
+    "status": "pending_nadra",
+    "buyerApprovedAt": null,
+    "createdAt": "2026-04-12T10:00:00.000Z",
+    "completedAt": null,
+    "transactionHash": null
+  }
+}
+```
+
+**`POST /api/transfers/:transferId/buyer-approve`** — header `Authorization: Bearer <token>` (**buyer** only) → `200`
+
+```json
+{
+  "message": "Buyer approval recorded.",
+  "transfer": { "...": "same shape as above; buyerApprovedAt set" }
+}
+```
+
+**`POST /api/transfers/:transferId/simulate-nadra`** — header `Authorization: Bearer <token>` (seller or buyer). Optional JSON body `{ "verified": true }` (default) or `{ "verified": false }` to simulate **failed** biometrics (no chain write; ticket ends in `nadra_failed`).
+
+Success → `200`
 
 ```json
 {
@@ -203,9 +240,12 @@ Unknown id → `404` JSON: `{ "error": "No record found for this parcel id." }`
   "transferId": "uuid",
   "transactionHash": "0x...",
   "parcelId": "uuid",
-  "newOwnerCnic": "3520222222222"
+  "newOwnerCnic": "3520222222222",
+  "status": "completed"
 }
 ```
+
+Failed verification → `200` with `message` describing failure, `transactionHash: null`, `status: "nadra_failed"`.
 
 **`POST /api/admin/parcels`** — admin JWT, body (all strings unless noted):
 
@@ -218,11 +258,16 @@ Unknown id → `404` JSON: `{ "error": "No record found for this parcel id." }`
   "khasra": "optional",
   "disputed": false,
   "fardText": "optional plain text stored as fard.txt",
-  "registryText": "optional plain text stored as registry.txt"
+  "registryText": "optional plain text stored as registry.txt",
+  "mutationText": "optional plain text stored as mutation.txt"
 }
 ```
 
 → `201` `{ "parcel": { ...same shape as search list items... } }`
+
+**`PATCH /api/admin/parcels/:parcelId`** — admin JWT, body `{ "disputed": true | false }` → `200` `{ "parcel": { ... } }` (updates an **existing** parcel’s dispute flag).
+
+**`POST /api/citizen/parcels/:parcelId/documents`** — citizen JWT; body `{ "kind": "fard" | "registry" | "mutation", "text": "plain UTF-8 body" }`. The caller’s CNIC must match the parcel’s **current owner**. → `201` `{ "parcel": { ... } }`.
 
 **`GET /api/blockchain`** → `200`
 
@@ -266,7 +311,9 @@ Unknown id → `404` JSON: `{ "error": "No record found for this parcel id." }`
 }
 ```
 
-Document routes **`.../documents/fard`**, **`.../registry`**, **`.../ownership-certificate.pdf`** return **file streams** (not JSON): `text/plain` or `application/pdf`, or `404` with `{ "error": "..." }`.
+Document routes under **`/api/parcels/.../documents/...`** require **`Authorization: Bearer`** and **parcel-level authorization** (same rules as full sensitive JSON). They return **file streams** (`text/plain` / `application/pdf`) or `401` / `403` / `404` with JSON errors when applicable.
+
+**Court / judge mirror** — under **`/api/court/parcels`** with JWT and role **`judge`** or **`admin`**: same **`search`**, **`/:parcelId`**, and **document** paths as the public parcel API (for workflows that require an authenticated court officer). Create a judge user via `JUDGE_BOOTSTRAP_*` env vars or by inserting a user with `role: "judge"` in MongoDB.
 
 ---
 
@@ -302,27 +349,36 @@ CNIC is the **primary** login identifier (13 digits; dashes allowed in input).
 
 ---
 
-### Parcels (public) — `/api/parcels`
+### Parcels — `/api/parcels` (RBAC / sensitive data)
 
-Per MVP, **search**, **detail**, and **document** routes are **public** (no JWT), so anyone can inspect land records and download available documents—matching the product vision of transparent, verifiable records.
+**Location search and parcel detail** work **without** a JWT, but **CNICs and registered owner names are redacted** for anonymous callers (`currentOwnerCnic` / history `ownerCnic` become `"[redacted]"`, names `null`, and `sensitiveDataRedacted: true`).
 
-| Method | Path | Query / params | Success |
-|--------|------|----------------|---------|
-| `GET` | `/api/parcels/search` | At least one of: `district`, `moza`, `plotNumber`, `ownerCnic` | `200` `{ found, message?, parcels[] }` |
-| `GET` | `/api/parcels/:parcelId` | — | `200` `{ parcel }` or `404` |
-| `GET` | `/api/parcels/:parcelId/documents/fard` | — | `200` `text/plain` attachment or `404` |
-| `GET` | `/api/parcels/:parcelId/documents/registry` | — | `200` `text/plain` attachment or `404` |
-| `GET` | `/api/parcels/:parcelId/documents/ownership-certificate.pdf` | — | `200` `application/pdf` or `404` |
+**Who sees full sensitive fields?** Users with JWT and role **`admin`** or **`judge`** (any parcel), or **`citizen`** when they are the **current owner** or their CNIC appears in **`ownershipHistory`**.
 
-**`GET /api/parcels/search`** — **Finds parcels** matching **all** query parameters you supply (AND logic). Text fields use case-insensitive partial matching; `ownerCnic` is normalized to 13 digits and matched against the **current** owner. If **no query parameter** is provided, or **no row** matches, the response still returns `200` with `found: false`, `parcels: []`, and **`message: "No record found."`** so the UI can show the stakeholder-required wording clearly.
+**`ownerCnic` query filter:** requires JWT. **`citizen`** may only search **their own** CNIC; **`admin`** / **`judge`** may search any. Anonymous requests receive **`401`** when a valid 13-digit `ownerCnic` filter is used.
 
-**`GET /api/parcels/:parcelId`** — **Single parcel record** for a known id (returned from search or admin creation). Includes **full `ownershipHistory`** from first registration through each transfer, **`disputed`** flag, **`currentOwnerCnic`**, and flags **`hasFard` / `hasRegistry`**. Returns `404` if the id does not exist.
+**Document downloads** (`fard`, `registry`, `mutation`, `ownership-certificate.pdf`) **always require JWT** and the same parcel-level rule as above; otherwise **`401`** (no token) or **`403`** (token but not entitled).
 
-**`GET /api/parcels/:parcelId/documents/fard`** — **Downloads the Fard (title-deed) file** when an officer stored one at parcel creation. Streams UTF-8 plain text as an attachment. `404` if no file was stored for this parcel.
+| Method | Path | Auth | Success |
+|--------|------|------|---------|
+| `GET` | `/api/parcels/search` | Optional Bearer | `200` `{ found, message?, parcels[] }` |
+| `GET` | `/api/parcels/:parcelId` | Optional Bearer | `200` `{ parcel }` or `404` |
+| `GET` | `/api/parcels/:parcelId/documents/fard` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
+| `GET` | `/api/parcels/:parcelId/documents/registry` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
+| `GET` | `/api/parcels/:parcelId/documents/mutation` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
+| `GET` | `/api/parcels/:parcelId/documents/ownership-certificate.pdf` | **Bearer** + parcel RBAC | `200` PDF or `401` / `403` / `404` |
 
-**`GET /api/parcels/:parcelId/documents/registry`** — **Downloads the registry document** when present (some parcels may have registry, some only Fard—per domain rules). Same behavior as Fard: attachment or `404`.
+**`GET /api/parcels/search`** — **Finds parcels** matching **all** query parameters you supply (AND logic). Text fields use case-insensitive partial matching; `ownerCnic` is normalized to 13 digits and matched against the **current** owner (with auth rules above). If **no query parameter** is provided, or **no row** matches, the response still returns `200` with `found: false`, `parcels: []`, and **`message: "No record found."`**.
 
-**`GET /api/parcels/:parcelId/documents/ownership-certificate.pdf`** — **Generates a PDF** summarizing parcel identity, current owner CNIC, disputed status, and **full ownership history**—suitable for printing or attaching as “proof” in demos (not a government-issued doc). `404` if the parcel id is unknown.
+**`GET /api/parcels/:parcelId`** — **Single parcel record** with **RBAC projection** (see above). Non-location fields (`disputed`, document flags, ids, dates) are always returned; CNIC/name fields follow entitlement.
+
+**`GET /api/parcels/:parcelId/documents/fard`** — Streams Fard text when the file exists **and** the caller is authorized for this parcel’s sensitive data.
+
+**`GET /api/parcels/:parcelId/documents/registry`** — Same as Fard for registry files.
+
+**`GET /api/parcels/:parcelId/documents/mutation`** — Same as Fard for mutation files.
+
+**`GET /api/parcels/:parcelId/documents/ownership-certificate.pdf`** — PDF built from the **full** internal record (never redacted placeholders) when the caller is authorized; otherwise `403`.
 
 ---
 
@@ -331,11 +387,17 @@ Per MVP, **search**, **detail**, and **document** routes are **public** (no JWT)
 | Method | Path | Auth | Body | Success |
 |--------|------|------|------|---------|
 | `POST` | `/api/transfers` | Bearer (seller) | `{ parcelId, buyerCnic }` | `201` `{ transferId, status }` |
-| `POST` | `/api/transfers/:transferId/simulate-nadra` | Bearer (seller **or** buyer) | — | `200` + `transactionHash`, `parcelId`, `newOwnerCnic` |
+| `GET` | `/api/transfers/:transferId` | Bearer (seller **or** buyer) | — | `200` `{ transfer }` |
+| `POST` | `/api/transfers/:transferId/buyer-approve` | Bearer (**buyer**) | — | `200` message + `{ transfer }` |
+| `POST` | `/api/transfers/:transferId/simulate-nadra` | Bearer (seller **or** buyer) | Optional `{ verified: boolean }` | `200` (completed **or** `nadra_failed`) |
 
-**`POST /api/transfers`** — Starts a **land transfer ticket**: the **logged-in user must be the current owner** of `parcelId`. The body supplies the **buyer’s CNIC** (the party who will receive title after verification). Creates a row in `pending_nadra` state. Blocked if the parcel is **disputed**, if a pending transfer already exists, if buyer CNIC is invalid, or if buyer equals seller. Used in the “seller initiates transfer” step from the interview.
+**`POST /api/transfers`** — Starts a **land transfer ticket**: the **logged-in user must be the current owner** of `parcelId`. The body supplies the **buyer’s CNIC** (the party who will receive title after verification). Creates a row in `pending_nadra` state. The server also emits a **console notification** line (and includes the seller’s email in that line when their profile has one). Blocked if the parcel is **disputed**, if a pending transfer already exists, if buyer CNIC is invalid, or if buyer equals seller.
 
-**`POST /api/transfers/:transferId/simulate-nadra`** — **MVP substitute for NADRA office fingerprint verification.** Any authenticated user who is **either the seller or the buyer** on that ticket may call it. The server treats both parties as NADRA-verified, then **finalizes** the transfer: appends a **`LAND_TRANSFER`** payload to the Solidity ledger, moves **`currentOwnerCnic`** to the buyer, pushes a new **history** entry, and marks the ticket **completed** with the Ethereum **transaction hash**. In production this would be split/replaced with real NADRA callbacks.
+**`GET /api/transfers/:transferId`** — Lets **seller or buyer** inspect the ticket (`parcelId`, CNICs, `buyerApprovedAt`, `status`, etc.) before the next steps.
+
+**`POST /api/transfers/:transferId/buyer-approve`** — **Buyer-only** step: records explicit approval. **Required** before **`simulate-nadra`** can complete a transfer. Idempotent if already approved.
+
+**`POST /api/transfers/:transferId/simulate-nadra`** — **MVP substitute for NADRA verification** after buyer approval. Caller must be **seller or buyer**. Default body (or `{ "verified": true }`) **finalizes** the transfer: **`LAND_TRANSFER`** on-chain, Mongo owner + history update, ticket **`completed`**. `{ "verified": false }` simulates **failed** verification: ticket **`nadra_failed`**, **no** chain write, owner unchanged.
 
 ---
 
@@ -345,11 +407,16 @@ Requires JWT with **`role: "admin"`** (e.g. Patwari / land-record officer in the
 
 | Method | Path | Body | Success |
 |--------|------|------|---------|
-| `POST` | `/api/admin/parcels` | `{ district, moza, plotNumber, currentOwnerCnic, khasra?, disputed?, fardText?, registryText? }` | `201` `{ parcel }` |
+| `POST` | `/api/admin/parcels` | `{ district, moza, plotNumber, currentOwnerCnic, khasra?, disputed?, fardText?, registryText?, mutationText? }` | `201` `{ parcel }` |
+| `PATCH` | `/api/admin/parcels/:parcelId` | `{ disputed: boolean }` | `200` `{ parcel }` |
 
-**`POST /api/admin/parcels`** — **Registers a new parcel** not yet in the system: location fields, optional **khasra**, **current owner CNIC**, optional **disputed** flag, and optional **plain-text** bodies for Fard/registry (saved under `UPLOADS_DIR` for later download). Seeds an initial **ownership history** entry. Returns the same **public parcel** shape as search/detail. Non-admins receive `403`.
+**`POST /api/admin/parcels`** — **Registers a new parcel** not yet in the system: location fields, optional **khasra**, **current owner CNIC**, optional **disputed** flag, and optional **plain-text** bodies for Fard/registry/**mutation** (saved under `UPLOADS_DIR` for later download). Seeds an initial **ownership history** entry. Returns the same **public parcel** shape as search/detail. Non-admins receive `403`.
+
+**`PATCH /api/admin/parcels/:parcelId`** — Updates the **disputed** flag on an existing parcel (no delete/recreate).
 
 **Bootstrap admin:** set `ADMIN_BOOTSTRAP_CNIC` + `ADMIN_BOOTSTRAP_PASSWORD` once; the server creates that admin user on startup if the CNIC is unused—so you can log in and call this route without manual DB edits.
+
+**Bootstrap judge:** optional `JUDGE_BOOTSTRAP_CNIC` + `JUDGE_BOOTSTRAP_PASSWORD` create a **`judge`** user for **`/api/court/parcels`**.
 
 ---
 
@@ -369,6 +436,25 @@ Requires JWT with **`role: "admin"`** (e.g. Patwari / land-record officer in the
 
 ---
 
+### Application audit log (MongoDB)
+
+The API appends rows to the **`audit_logs`** collection for key actions, including:
+
+- Successful **`auth.login`**
+- **`transfer.created`**, **`transfer.buyer_approved`**, **`transfer.nadra_succeeded`**, **`transfer.nadra_failed`**
+- **`admin.parcel_created`**, **`admin.parcel_updated`**
+- **`parcel.citizen_document_uploaded`**
+
+Each document has `action`, optional `actorUserId` / `actorCnic`, ISO `recordedAt`, and a small `metadata` object. This complements the **on-chain** ledger (which still anchors **`LAND_TRANSFER`** and generic **`LEDGER_APPEND`** payloads).
+
+---
+
+### Search performance
+
+`Parcel` defines compound and single-field indexes (`district`, `moza`, `plotNumber`, `currentOwnerCnic`, and `{ district, moza, plotNumber }`) so typical filter queries stay index-backed. For heavy load, run `explain()` on your query patterns and tune as needed.
+
+---
+
 ## MVP acceptance ↔ tests
 
 | Criterion (interview) | Test file | Test name |
@@ -379,8 +465,10 @@ Requires JWT with **`role: "admin"`** (e.g. Patwari / land-record officer in the
 | Search by owner CNIC | `mvpAcceptance` | `AC: search by owner CNIC…` |
 | Detail shows history + disputed | `mvpAcceptance` | `AC: parcel detail shows full ownership history…` |
 | Download Fard, registry, PDF certificate | `mvpAcceptance` | `AC: download Fard and registry…` |
-| Transfer + simulated NADRA + chain | `mvpAcceptance` | `AC: seller initiates transfer; simulate NADRA completes…` |
+| Transfer + simulated NADRA + chain | `mvpAcceptance` | `AC: seller initiates transfer; simulate NADRA completes…` (includes buyer approval + `GET` transfer) |
 | Disputed blocks transfer | `mvpAcceptance` | `AC: disputed parcel blocks new transfer` |
+| Owner names, NADRA failure, admin PATCH, citizen upload, court API, audit | `tests/extendedFeatures.test.ts` | (regression) |
+| Parcel RBAC (redaction, owner search, document JWT) | `tests/parcelRbac.test.ts` | (regression) |
 | Core auth + chain append | `tests/app.test.ts`, `tests/authService.test.ts`, `tests/ethLedgerService.test.ts` | (regression) |
 
 Run tests (Mongo must be up):
@@ -398,16 +486,22 @@ Uses `jest --runInBand` to avoid cross-suite collisions on `ledgerland_test`.
 | Path | Role |
 |------|------|
 | `contracts/LandLedger.sol` | On-chain append-only store |
-| `src/models/User.ts` | CNIC users + partial unique email index |
-| `src/models/Parcel.ts` | Parcel + `ownershipHistory` |
-| `src/models/Transfer.ts` | Transfer tickets |
-| `src/services/parcelService.ts` | Search, create, document paths |
-| `src/services/transferService.ts` | Transfer + NADRA simulation + ledger |
+| `src/models/User.ts` | CNIC users + partial unique email index (`citizen` / `admin` / `judge`) |
+| `src/models/Parcel.ts` | Parcel + `ownershipHistory` + document paths |
+| `src/models/Transfer.ts` | Transfer tickets (`buyerApprovedAt`, `nadra_failed` terminal state) |
+| `src/models/AuditLog.ts` | Application audit events |
+| `src/services/parcelService.ts` | Search, create, citizen uploads, document paths, owner name enrichment |
+| `src/services/transferService.ts` | Transfer + buyer approval + NADRA simulation + ledger |
 | `src/services/documentService.ts` | Ownership PDF |
+| `src/services/auditService.ts` | Mongo audit writer |
+| `src/services/notificationService.ts` | Transfer-started owner notification (console; uses email when present) |
 | `src/routes/parcelRoutes.ts` | Public parcel + downloads |
+| `src/routes/citizenParcelRoutes.ts` | Owner document uploads |
+| `src/routes/courtRoutes.ts` | Judge/admin authenticated parcel mirror |
 | `src/routes/transferRoutes.ts` | Authenticated transfers |
-| `src/routes/adminRoutes.ts` | Admin parcel creation |
+| `src/routes/adminRoutes.ts` | Admin parcel create + patch |
 | `src/utils/cnic.ts` | Normalize / validate CNIC |
+| `src/utils/parcelRbac.ts` | Parcel sensitive-field redaction and search/document gates |
 | `tests/mvpAcceptance.test.ts` | Product-owner acceptance |
 
 ## Scripts
@@ -424,4 +518,4 @@ Uses `jest --runInBand` to avoid cross-suite collisions on `ledgerland_test`.
 
 - **README:** narrative per route, plus **[Query parameters & sample JSON](#query-parameters--sample-json-for-frontend)** for frontend integration.
 - **Code:** each HTTP handler in `src/auth/authRoutes.ts`, `src/routes/*.ts`, and the `/health` handler in `src/app.ts` has a **JSDoc** block naming the method/path and describing behavior (including **`GET /api/parcels/search`** query keys).
-- **Services:** `ParcelService`, `TransferService`, `AuthService`, etc. document their public methods with JSDoc.
+- **Services:** `ParcelService`, `TransferService`, `AuthService`, `AuditService`, `NotificationService`, etc. document their public methods with JSDoc.

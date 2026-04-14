@@ -26,16 +26,19 @@ export function buildOwnershipCertificatePdf(parcel: ParcelPublicView): Promise<
     }
     doc.text(`Disputed flag: ${parcel.disputed ? "YES" : "NO"}`);
     doc.moveDown();
-    doc.fontSize(12).text("Current owner (CNIC)", { underline: true });
-    doc.fontSize(11).text(parcel.currentOwnerCnic);
+    doc.fontSize(12).text("Current owner", { underline: true });
+    doc.fontSize(11).text(
+        parcel.currentOwnerFullName
+          ? `${parcel.currentOwnerFullName} — CNIC ${parcel.currentOwnerCnic}`
+          : `CNIC ${parcel.currentOwnerCnic}`,
+      );
     doc.moveDown();
     doc.fontSize(12).text("Ownership history (oldest → newest)", { underline: true });
     parcel.ownershipHistory.forEach((h, i) => {
+      const label = h.ownerFullName ? `${h.ownerFullName} (${h.ownerCnic})` : h.ownerCnic;
       doc
         .fontSize(10)
-        .text(
-          `${i + 1}. CNIC ${h.ownerCnic} — acquired ${h.acquiredAt}${h.note ? ` (${h.note})` : ""}`,
-        );
+        .text(`${i + 1}. ${label} — acquired ${h.acquiredAt}${h.note ? ` (${h.note})` : ""}`);
     });
     doc.moveDown();
     doc.fontSize(9).text(

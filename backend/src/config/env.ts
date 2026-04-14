@@ -82,3 +82,15 @@ export const ADMIN_BOOTSTRAP_CNIC = process.env.ADMIN_BOOTSTRAP_CNIC?.trim()
  * Password paired with {@link ADMIN_BOOTSTRAP_CNIC} for first-run admin creation.
  */
 export const ADMIN_BOOTSTRAP_PASSWORD = process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "";
+
+/**
+ * Optional bootstrap: creates a **judge** user for **`/api/court/*`** read APIs when set.
+ */
+export const JUDGE_BOOTSTRAP_CNIC = process.env.JUDGE_BOOTSTRAP_CNIC?.trim()
+  ? normalizeCnic(process.env.JUDGE_BOOTSTRAP_CNIC.trim())
+  : "";
+
+/**
+ * Password paired with {@link JUDGE_BOOTSTRAP_CNIC}.
+ */
+export const JUDGE_BOOTSTRAP_PASSWORD = process.env.JUDGE_BOOTSTRAP_PASSWORD ?? "";

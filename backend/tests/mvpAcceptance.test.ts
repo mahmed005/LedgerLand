@@ -137,6 +137,7 @@ describe("MVP acceptance (product owner criteria)", () => {
     expect(hit.status).toBe(200);
     expect(hit.body.found).toBe(true);
     expect(hit.body.parcels[0].id).toBe(parcelId);
+    expect(hit.body.parcels[0].sensitiveDataRedacted).toBe(true);
 
     const miss = await request(app).get("/api/parcels/search?district=Nowhere");
     expect(miss.status).toBe(200);
@@ -162,7 +163,9 @@ describe("MVP acceptance (product owner criteria)", () => {
         disputed: true,
       });
     const parcelId = created.body.parcel.id as string;
-    const detail = await request(app).get(`/api/parcels/${parcelId}`);
+    const detail = await request(app)
+      .get(`/api/parcels/${parcelId}`)
+      .set("Authorization", `Bearer ${adminTok}`);
     expect(detail.status).toBe(200);
     expect(detail.body.parcel.disputed).toBe(true);
     expect(detail.body.parcel.ownershipHistory.length).toBeGreaterThanOrEqual(1);
@@ -185,7 +188,9 @@ describe("MVP acceptance (product owner criteria)", () => {
         plotNumber: "K-9",
         currentOwnerCnic: CNIC_SELLER,
       });
-    const byOwner = await request(app).get(`/api/parcels/search?ownerCnic=${CNIC_SELLER}`);
+    const byOwner = await request(app)
+      .get(`/api/parcels/search?ownerCnic=${CNIC_SELLER}`)
+      .set("Authorization", `Bearer ${adminTok}`);
     expect(byOwner.status).toBe(200);
     expect(byOwner.body.found).toBe(true);
     expect(byOwner.body.parcels.length).toBeGreaterThanOrEqual(1);
@@ -211,15 +216,21 @@ describe("MVP acceptance (product owner criteria)", () => {
       });
     const parcelId = created.body.parcel.id as string;
 
-    const fard = await request(app).get(`/api/parcels/${parcelId}/documents/fard`);
+    const fard = await request(app)
+      .get(`/api/parcels/${parcelId}/documents/fard`)
+      .set("Authorization", `Bearer ${adminTok}`);
     expect(fard.status).toBe(200);
     expect(fard.text).toContain("Fard content");
 
-    const reg = await request(app).get(`/api/parcels/${parcelId}/documents/registry`);
+    const reg = await request(app)
+      .get(`/api/parcels/${parcelId}/documents/registry`)
+      .set("Authorization", `Bearer ${adminTok}`);
     expect(reg.status).toBe(200);
     expect(reg.text).toContain("Registry content");
 
-    const pdf = await request(app).get(`/api/parcels/${parcelId}/documents/ownership-certificate.pdf`);
+    const pdf = await request(app)
+      .get(`/api/parcels/${parcelId}/documents/ownership-certificate.pdf`)
+      .set("Authorization", `Bearer ${adminTok}`);
     expect(pdf.status).toBe(200);
     expect(pdf.headers["content-type"]).toMatch(/application\/pdf/);
     expect(pdf.body.length).toBeGreaterThan(100);
@@ -262,6 +273,18 @@ describe("MVP acceptance (product owner criteria)", () => {
       password: "BuyerPass123",
     })).body.token as string;
 
+    const view = await request(app)
+      .get(`/api/transfers/${transferId}`)
+      .set("Authorization", `Bearer ${buyerTok}`);
+    expect(view.status).toBe(200);
+    expect(view.body.transfer.buyerCnic).toBe(CNIC_BUYER);
+
+    const approved = await request(app)
+      .post(`/api/transfers/${transferId}/buyer-approve`)
+      .set("Authorization", `Bearer ${buyerTok}`);
+    expect(approved.status).toBe(200);
+    expect(approved.body.transfer.buyerApprovedAt).toBeTruthy();
+
     const done = await request(app)
       .post(`/api/transfers/${transferId}/simulate-nadra`)
       .set("Authorization", `Bearer ${buyerTok}`);
@@ -271,7 +294,9 @@ describe("MVP acceptance (product owner criteria)", () => {
 
     expect((await ledger.listRecords()).length).toBeGreaterThanOrEqual(beforeCount + 1);
 
-    const detail = await request(app).get(`/api/parcels/${parcelId}`);
+    const detail = await request(app)
+      .get(`/api/parcels/${parcelId}`)
+      .set("Authorization", `Bearer ${buyerTok}`);
     expect(detail.body.parcel.currentOwnerCnic).toBe(CNIC_BUYER);
     expect(detail.body.parcel.ownershipHistory.some((h: { ownerCnic: string }) => h.ownerCnic === CNIC_BUYER)).toBe(
       true,
