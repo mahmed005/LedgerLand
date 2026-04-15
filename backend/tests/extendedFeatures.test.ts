@@ -228,6 +228,60 @@ describe("Extended domain features", () => {
     expect(dl.text).toContain("Mutation body");
   });
 
+  it("current owner can upload via POST /api/parcels/:id/documents/upload (JSON)", async () => {
+    await seedUsers();
+    const app = buildApp();
+    const adminTok = (await request(app).post("/api/auth/login").send({
+      cnic: CNIC_ADMIN,
+      password: "AdminPass123",
+    })).body.token as string;
+    const created = await request(app)
+      .post("/api/admin/parcels")
+      .set("Authorization", `Bearer ${adminTok}`)
+      .send({
+        district: "UpPath",
+        moza: "M",
+        plotNumber: "P1",
+        currentOwnerCnic: CNIC_SELLER,
+      });
+    const parcelId = created.body.parcel.id as string;
+    const sellerTok = (await request(app).post("/api/auth/login").send({
+      cnic: CNIC_SELLER,
+      password: "SellerPass123",
+    })).body.token as string;
+    const up = await request(app)
+      .post(`/api/parcels/${parcelId}/documents/upload`)
+      .set("Authorization", `Bearer ${sellerTok}`)
+      .send({ kind: "registry", text: "Registry via /api/parcels upload" });
+    expect(up.status).toBe(201);
+    expect(up.body.parcel.hasRegistry).toBe(true);
+  });
+
+  it("admin can upload for another owners parcel via /api/parcels/:id/documents/upload", async () => {
+    await seedUsers();
+    const app = buildApp();
+    const adminTok = (await request(app).post("/api/auth/login").send({
+      cnic: CNIC_ADMIN,
+      password: "AdminPass123",
+    })).body.token as string;
+    const created = await request(app)
+      .post("/api/admin/parcels")
+      .set("Authorization", `Bearer ${adminTok}`)
+      .send({
+        district: "AdminUp",
+        moza: "M2",
+        plotNumber: "P2",
+        currentOwnerCnic: CNIC_SELLER,
+      });
+    const parcelId = created.body.parcel.id as string;
+    const up = await request(app)
+      .post(`/api/parcels/${parcelId}/documents/upload`)
+      .set("Authorization", `Bearer ${adminTok}`)
+      .send({ kind: "fard", text: "Fard seeded by admin on upload route" });
+    expect(up.status).toBe(201);
+    expect(up.body.parcel.hasFard).toBe(true);
+  });
+
   it("judge JWT can search parcels via court API", async () => {
     await seedUsers();
     const app = buildApp();

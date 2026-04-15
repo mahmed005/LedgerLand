@@ -36,7 +36,12 @@ export function createCitizenParcelRouter(
         res.status(400).json({ error: "text must be a string" });
         return;
       }
-      const parcel = await parcels.saveCitizenDocument(req.params.parcelId, req.user!.cnic, kind, text);
+      const parcel = await parcels.saveParcelDocument(
+        req.params.parcelId,
+        { cnic: req.user!.cnic, role: req.user!.role },
+        kind,
+        text,
+      );
       await audit.record({
         action: "parcel.citizen_document_uploaded",
         actorUserId: req.user!.id,
@@ -50,8 +55,14 @@ export function createCitizenParcelRouter(
         res.status(404).json({ error: "Parcel not found" });
         return;
       }
-      if (msg === "NOT_OWNER") {
-        res.status(403).json({ error: "Only the current owner can upload documents for this parcel" });
+      if (msg === "NOT_ALLOWED") {
+        if (req.user?.role === "judge") {
+          res.status(403).json({ error: "Court officers cannot upload parcel documents" });
+          return;
+        }
+        res.status(403).json({
+          error: "Only the current owner or an admin may upload documents for this parcel",
+        });
         return;
       }
       if (msg === "EMPTY_DOCUMENT" || msg === "INVALID_ACTOR_CNIC") {

@@ -267,7 +267,9 @@ Failed verification → `200` with `message` describing failure, `transactionHas
 
 **`PATCH /api/admin/parcels/:parcelId`** — admin JWT, body `{ "disputed": true | false }` → `200` `{ "parcel": { ... } }` (updates an **existing** parcel’s dispute flag).
 
-**`POST /api/citizen/parcels/:parcelId/documents`** — citizen JWT; body `{ "kind": "fard" | "registry" | "mutation", "text": "plain UTF-8 body" }`. The caller’s CNIC must match the parcel’s **current owner**. → `201` `{ "parcel": { ... } }`.
+**`POST /api/parcels/:parcelId/documents/upload`** — **preferred** upload URL; Bearer JWT. Creates or replaces the Fard, registry, or mutation text file for the parcel (same on-disk layout as admin create). See **[Parcels — document upload](#parcels--apiparcels-rbac--sensitive-data)** for JSON vs multipart, RBAC, and errors.
+
+**`POST /api/citizen/parcels/:parcelId/documents`** — same behavior as **`/api/parcels/.../documents/upload`** when using a JSON body (`kind` + `text`); kept for older clients. **`admin`** may use either path to upload for **any** parcel; **`judge`** cannot upload from either route. → `201` `{ "parcel": { ... } }`.
 
 **`GET /api/blockchain`** → `200`
 
@@ -311,7 +313,9 @@ Failed verification → `200` with `message` describing failure, `transactionHas
 }
 ```
 
-Document routes under **`/api/parcels/.../documents/...`** require **`Authorization: Bearer`** and **parcel-level authorization** (same rules as full sensitive JSON). They return **file streams** (`text/plain` / `application/pdf`) or `401` / `403` / `404` with JSON errors when applicable.
+**Document downloads** under **`/api/parcels/.../documents/...`** require **`Authorization: Bearer`** and **parcel-level authorization** (same rules as full sensitive JSON). They return **file streams** (`text/plain` / `application/pdf`) or `401` / `403` / `404` with JSON errors when applicable.
+
+**Document upload** uses **`POST /api/parcels/:parcelId/documents/upload`** (JWT). Upload authorization is **not** the same as download: **`admin`** may upload for any parcel; **`citizen`** (and other roles except **`judge`**) only if their CNIC is the parcel’s **current owner**; **`judge`** is rejected with **`403`**. See the Parcels section table and prose below.
 
 **Court / judge mirror** — under **`/api/court/parcels`** with JWT and role **`judge`** or **`admin`**: same **`search`**, **`/:parcelId`**, and **document** paths as the public parcel API (for workflows that require an authenticated court officer). Create a judge user via `JUDGE_BOOTSTRAP_*` env vars or by inserting a user with `role: "judge"` in MongoDB.
 
@@ -359,10 +363,13 @@ CNIC is the **primary** login identifier (13 digits; dashes allowed in input).
 
 **Document downloads** (`fard`, `registry`, `mutation`, `ownership-certificate.pdf`) **always require JWT** and the same parcel-level rule as above; otherwise **`401`** (no token) or **`403`** (token but not entitled).
 
+**Document upload** (`POST .../documents/upload`) **always requires JWT**; entitlement is **owner-or-admin** (see **`POST .../documents/upload`** below), not the same RBAC as read/download.
+
 | Method | Path | Auth | Success |
 |--------|------|------|---------|
 | `GET` | `/api/parcels/search` | Optional Bearer | `200` `{ found, message?, parcels[] }` |
 | `GET` | `/api/parcels/:parcelId` | Optional Bearer | `200` `{ parcel }` or `404` |
+| `POST` | `/api/parcels/:parcelId/documents/upload` | **Bearer** (owner or **admin**) | `201` `{ parcel }` or `400` / `403` / `404` |
 | `GET` | `/api/parcels/:parcelId/documents/fard` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
 | `GET` | `/api/parcels/:parcelId/documents/registry` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
 | `GET` | `/api/parcels/:parcelId/documents/mutation` | **Bearer** + parcel RBAC | `200` stream or `401` / `403` / `404` |
@@ -372,6 +379,15 @@ CNIC is the **primary** login identifier (13 digits; dashes allowed in input).
 
 **`GET /api/parcels/:parcelId`** — **Single parcel record** with **RBAC projection** (see above). Non-location fields (`disputed`, document flags, ids, dates) are always returned; CNIC/name fields follow entitlement.
 
+**`POST /api/parcels/:parcelId/documents/upload`** — Upload or replace one of **fard**, **registry**, or **mutation** as **plain text** stored under `UPLOADS_DIR` (e.g. `<parcelId>/fard.txt`). **`admin`:** any parcel. **Other roles:** only if JWT CNIC equals **`currentOwnerCnic`**. **`judge`:** **`403`** (court officers are read-only for uploads in this MVP). Successful writes return **`201`** `{ "parcel": { ... } }` and append audit **`parcel.document_uploaded`**.
+
+Two request shapes are supported:
+
+- **JSON:** `Content-Type: application/json`, body `{ "kind": "<fard|registry|mutation>", "text": "UTF-8 plain text" }` (after trim, `text` must be non-empty).
+- **Multipart:** `Content-Type: multipart/form-data`; form field **`kind`** (same three values) plus either a **`file`** part (read as UTF-8 text, max **10 MB**) or a **`text`** field.
+
+Common errors: missing/invalid token **`401`**; wrong role or not owner **`403`**; unknown parcel **`404`**; bad `kind`, empty body, or oversize file **`400`**; storage failure **`500`**.
+
 **`GET /api/parcels/:parcelId/documents/fard`** — Streams Fard text when the file exists **and** the caller is authorized for this parcel’s sensitive data.
 
 **`GET /api/parcels/:parcelId/documents/registry`** — Same as Fard for registry files.
@@ -379,6 +395,14 @@ CNIC is the **primary** login identifier (13 digits; dashes allowed in input).
 **`GET /api/parcels/:parcelId/documents/mutation`** — Same as Fard for mutation files.
 
 **`GET /api/parcels/:parcelId/documents/ownership-certificate.pdf`** — PDF built from the **full** internal record (never redacted placeholders) when the caller is authorized; otherwise `403`.
+
+### Citizen parcels — `/api/citizen/parcels`
+
+| Method | Path | Auth | Body | Success |
+|--------|------|------|------|---------|
+| `POST` | `/api/citizen/parcels/:parcelId/documents` | **Bearer** (owner or **admin**) | JSON **`kind`** (`fard` / `registry` / `mutation`) + **`text`** | `201` `{ parcel }` |
+
+Same **owner-or-admin** upload rules and **`judge`** denial as **`POST /api/parcels/:parcelId/documents/upload`**. This route accepts **JSON only** (no multipart). Audit: **`parcel.citizen_document_uploaded`**.
 
 ---
 
@@ -443,7 +467,8 @@ The API appends rows to the **`audit_logs`** collection for key actions, includi
 - Successful **`auth.login`**
 - **`transfer.created`**, **`transfer.buyer_approved`**, **`transfer.nadra_succeeded`**, **`transfer.nadra_failed`**
 - **`admin.parcel_created`**, **`admin.parcel_updated`**
-- **`parcel.citizen_document_uploaded`**
+- **`parcel.citizen_document_uploaded`** (legacy path **`POST /api/citizen/parcels/.../documents`**)
+- **`parcel.document_uploaded`** (**`POST /api/parcels/.../documents/upload`**)
 
 Each document has `action`, optional `actorUserId` / `actorCnic`, ISO `recordedAt`, and a small `metadata` object. This complements the **on-chain** ledger (which still anchors **`LAND_TRANSFER`** and generic **`LEDGER_APPEND`** payloads).
 
@@ -490,13 +515,13 @@ Uses `jest --runInBand` to avoid cross-suite collisions on `ledgerland_test`.
 | `src/models/Parcel.ts` | Parcel + `ownershipHistory` + document paths |
 | `src/models/Transfer.ts` | Transfer tickets (`buyerApprovedAt`, `nadra_failed` terminal state) |
 | `src/models/AuditLog.ts` | Application audit events |
-| `src/services/parcelService.ts` | Search, create, citizen uploads, document paths, owner name enrichment |
+| `src/services/parcelService.ts` | Search, create, document uploads (owner/admin), paths, owner name enrichment |
 | `src/services/transferService.ts` | Transfer + buyer approval + NADRA simulation + ledger |
 | `src/services/documentService.ts` | Ownership PDF |
 | `src/services/auditService.ts` | Mongo audit writer |
 | `src/services/notificationService.ts` | Transfer-started owner notification (console; uses email when present) |
-| `src/routes/parcelRoutes.ts` | Public parcel + downloads |
-| `src/routes/citizenParcelRoutes.ts` | Owner document uploads |
+| `src/routes/parcelRoutes.ts` | Public parcel, downloads, **`POST .../documents/upload`** |
+| `src/routes/citizenParcelRoutes.ts` | **`POST .../documents`** (same upload rules as parcel route) |
 | `src/routes/courtRoutes.ts` | Judge/admin authenticated parcel mirror |
 | `src/routes/transferRoutes.ts` | Authenticated transfers |
 | `src/routes/adminRoutes.ts` | Admin parcel create + patch |
@@ -508,8 +533,8 @@ Uses `jest --runInBand` to avoid cross-suite collisions on `ledgerland_test`.
 
 | Script | Purpose |
 |--------|---------|
-| `npm run dev` | `tsx watch src/index.ts` |
-| `npm run build` / `npm start` | Compile / run `dist/` |
+| `npm run dev` | `tsx watch --env-file=.env src/index.ts` (loads `backend/.env`) |
+| `npm run build` / `npm start` | Compile / run `dist/` (`start` uses `node --env-file-if-exists=.env` when present) |
 | `npm run compile:solidity` | `hardhat compile` |
 | `npm run node:chain` / `deploy:local` | Local chain + deploy |
 | `npm test` | Jest `--runInBand` |

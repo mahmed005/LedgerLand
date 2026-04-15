@@ -31,7 +31,7 @@ export interface AppDependencies {
  * Mounted prefixes:
  * - `/health` — liveness
  * - `/api/auth` — CNIC signup, login, `me`
- * - `/api/parcels` — RBAC-aware search & detail (optional JWT); document downloads require JWT
+ * - `/api/parcels` — RBAC-aware search & detail (optional JWT); document downloads & uploads require JWT
  * - `/api/citizen/parcels` — owner document uploads (JWT)
  * - `/api/court/parcels` — judge/admin mirror of parcel reads & downloads (JWT)
  * - `/api/transfers` — authenticated transfer + buyer approval + simulated NADRA completion
@@ -58,7 +58,7 @@ export function createApp(deps: AppDependencies) {
   });
 
   app.use("/api/auth", createAuthRouter(deps.authService, requireAuth, audit));
-  app.use("/api/parcels", createParcelRouter(deps.parcelService, optionalAuth, requireAuth));
+  app.use("/api/parcels", createParcelRouter(deps.parcelService, optionalAuth, requireAuth, audit));
   app.use(
     "/api/citizen/parcels",
     createCitizenParcelRouter(deps.parcelService, requireAuth, audit),

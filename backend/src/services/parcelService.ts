@@ -63,7 +63,7 @@ export interface ParcelPublicView {
 }
 
 /**
- * Parcel search, creation, citizen document writes, and document path resolution.
+ * Parcel search, creation, document uploads, and document path resolution.
  */
 export class ParcelService {
   /**
@@ -205,29 +205,34 @@ export class ParcelService {
   }
 
   /**
-   * Writes or replaces a **plain-text** document for a parcel when the actor is the **current owner** (or admin via admin routes).
+   * Writes or replaces a **plain-text** document for a parcel.
+   * **`admin`** may write for any parcel; **`citizen`** (and other roles except `judge`) only when CNIC matches `currentOwnerCnic`.
+   * **`judge`** may not upload (court read-only in this MVP).
    *
    * @param parcelId - Parcel id.
-   * @param actorCnic - Authenticated user CNIC (must equal `currentOwnerCnic` unless overridden by route).
+   * @param actor - Authenticated user CNIC and role.
    * @param kind - Which document slot to write.
    * @param text - UTF-8 body to persist.
    */
-  async saveCitizenDocument(
+  async saveParcelDocument(
     parcelId: string,
-    actorCnic: string,
+    actor: { cnic: string; role: string },
     kind: "fard" | "registry" | "mutation",
     text: string,
   ): Promise<ParcelPublicView> {
-    const actor = normalizeCnic(actorCnic);
-    if (!isValidCnic(actor)) {
+    if (actor.role === "judge") {
+      throw new Error("NOT_ALLOWED");
+    }
+    const actorCnic = normalizeCnic(actor.cnic);
+    if (!isValidCnic(actorCnic)) {
       throw new Error("INVALID_ACTOR_CNIC");
     }
     const parcel = await ParcelModel.findById(parcelId);
     if (!parcel) {
       throw new Error("PARCEL_NOT_FOUND");
     }
-    if (parcel.currentOwnerCnic !== actor) {
-      throw new Error("NOT_OWNER");
+    if (actor.role !== "admin" && parcel.currentOwnerCnic !== actorCnic) {
+      throw new Error("NOT_ALLOWED");
     }
     const body = text.trim();
     if (!body.length) {
