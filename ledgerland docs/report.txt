@@ -1,0 +1,75 @@
+
+
+LedgerLand
+User Story Implementation Report
+Based on backend_docs.md  •  Jira export user_stories.pdf  •  April 2026
+
+1. Executive Summary
+This report maps all 17 user stories from the Jira project export against the documented backend implementation (LedgerLand Express + TypeScript API). Each acceptance criterion is assessed individually against what is stated in backend_docs.md. No assumptions or inferences beyond the documentation have been made.
+
+
+Key findings at a glance:
+7 stories are fully implemented and meet all documented acceptance criteria.
+7 stories are partially implemented — at least one acceptance criterion is unmet or only simulated.
+3 stories have no implementation evidence in the backend documentation.
+One data-quality issue was identified: the acceptance criteria exported for KAN-4 are identical to KAN-6, indicating a Jira copy-paste error.
+A design tension exists between KAN-26 (restrict CNIC visibility) and the explicit MVP decision to make parcel search and detail routes public.
+
+2. Summary Table
+The table below lists all stories, their epics, and implementation status at a glance.
+
+
+3. Story-by-Story Analysis
+Each story is assessed against its three acceptance criteria. Icons denote: ✓ criterion met · ~ partially met or simulated · ✕ not met.
+
+3.1  Land Records
+
+
+
+3.2  Ownership Transfer
+
+
+
+
+3.3  Document Management
+
+
+3.4  Audit & Court Access
+
+
+3.5  Admin & Control
+
+
+3.6  Notifications
+
+3.7  Non-Functional Requirements
+
+
+
+4. Priority Gaps & Recommendations
+The following gaps represent the highest-risk items based on the implementation analysis.
+
+Critical — missing functionality
+KAN-22 (Notifications): No owner notification on transfer initiation. This is a fraud-prevention requirement. Implement email/SMS dispatch from the POST /api/transfers handler using the stored email field and a notification service.
+KAN-11 (Citizen Document Upload): Citizens cannot upload title deeds or mutation documents. A dedicated authenticated upload route is needed. Mutation documents are not yet a supported document type in the schema.
+KAN-7 (Buyer Approval): No GET endpoint for buyers to view a pending transfer request, and no distinct approval action separated from NADRA simulation.
+
+High — incomplete implementation
+KAN-8 (NADRA Failure Path): The simulate-nadra endpoint always succeeds. A rejection scenario must be handled to satisfy the acceptance criterion that failure stops the transfer.
+KAN-20 (Flag Disputed Properties): No PATCH/PUT endpoint to mark an existing parcel as disputed after creation. An admin update endpoint is required.
+KAN-16 / KAN-26 (Access Control & Judge Role): A judge role with restricted authenticated access is absent. The public parcel routes expose CNIC data to anonymous callers, directly conflicting with KAN-26. Product owner input is needed to resolve the MVP public-access decision against the access-control requirement.
+
+Medium — partial gaps
+KAN-3 (Owner Name): The parcel response does not resolve the owner's full name from the User model. A JOIN or lookup is needed.
+KAN-24 (Audit Logging): Only transfer events are on-chain. Login, search, admin creation, and document-download events are not confirmed as audited.
+KAN-4 (Jira Data Error): The acceptance criteria block in the Jira export for KAN-4 duplicates KAN-6. This should be corrected in the project tracker for accurate sprint tracking.
+
+Low — non-functional
+KAN-25 (Performance): No performance SLAs, MongoDB index definitions, or caching strategies are documented. These should be specified and implemented before any load testing.
+
+5. Methodology & Sources
+All assessments in this report are derived exclusively from the two source documents listed below. No code was inspected beyond what is described in the documentation. Where the documentation is silent on a feature, the assessment records it as not implemented.
+
+Source 1: backend_docs.md — LedgerLand Express + TypeScript API documentation (as uploaded).
+Source 2: user_stories.pdf — Jira project export containing 7 epics and 17 user stories with acceptance criteria (as uploaded).
+Report generated: April 2026.

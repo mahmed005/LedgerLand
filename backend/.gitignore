@@ -1,0 +1,9 @@
+node_modules/
+dist/
+uploads/
+artifacts/
+cache/
+typechain-types/
+deployments/
+.env
+*.log

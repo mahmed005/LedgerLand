@@ -1,0 +1,282 @@
+=== TABLE ===
+7
+Fully Implemented | 7
+Partially Implemented | 3
+Not Implemented
+
+=== TABLE ===
+Story ID | Title | Epic | Status
+KAN-2 | Search land records using CNIC, district or plot number | Land Records | Fully Implemented
+KAN-3 | See complete ownership details of a property | Land Records | Partially Implemented
+KAN-4 | View full ownership history to track previous owners | Land Records | Fully Implemented
+KAN-6 | Seller initiates land transfer by entering buyer details | Ownership Transfer | Fully Implemented
+KAN-7 | Buyer verifies and approves transfer | Ownership Transfer | Partially Implemented
+KAN-8 | Biometric verification before transfer to prevent fraud | Ownership Transfer | Partially Implemented
+KAN-9 | Execute transfer automatically using smart contract | Ownership Transfer | Fully Implemented
+KAN-11 | Citizen uploads land-related documents so records are complete | Document Management | Not Implemented
+KAN-13 | Citizen downloads verified documents for legal use | Document Management | Fully Implemented
+KAN-16 | Judge gets read-only access to land records to resolve disputes | Audit & Court Access | Partially Implemented
+KAN-17 | Judge exports ownership history as PDF for court use | Audit & Court Access | Fully Implemented
+KAN-19 | Admin adds new land records to keep system updated | Admin & Control | Fully Implemented
+KAN-20 | Admin flags disputed properties so users are aware of risks | Admin & Control | Partially Implemented
+KAN-22 | Land owner notified when a transfer is initiated to prevent fraud | Notifications | Not Implemented
+KAN-24 | All actions logged with user id and timestamp for full audit trail | Non-Functional Requirements | Partially Implemented
+KAN-25 | System responds quickly so users do not waste time | Non-Functional Requirements | Not Implemented
+KAN-26 | Strong access control so unauthorized users cannot view sensitive data | Non-Functional Requirements | Partially Implemented
+
+=== TABLE ===
+KAN-2  Search land records using CNIC, district or plot number | KAN-2  Search land records using CNIC, district or plot number
+Epic | Land Records
+Status | Fully Implemented
+Backend | GET /api/parcels/search
+Acceptance Criteria | Acceptance Criteria
+✓ | User can enter CNIC / district / plot number
+ownerCnic, district, moza, and plotNumber all supported as AND-able query parameters.
+✓ | System returns matching land record
+Returns found: true with a populated parcels[] array when matches exist.
+✓ | If no record found, proper message is shown
+Returns found: false with message: "No record found." — satisfies the explicit wording requirement.
+
+=== TABLE ===
+KAN-3  See complete ownership details of a property | KAN-3  See complete ownership details of a property
+Epic | Land Records
+Status | Partially Implemented
+Backend | GET /api/parcels/:parcelId
+Acceptance Criteria | Acceptance Criteria
+~ | System shows owner name
+Only currentOwnerCnic is exposed in the parcel response. Full owner name from the User model is not resolved or joined.
+✓ | Ownership date is displayed
+acquiredAt is present in every ownershipHistory entry.
+✓ | Any dispute or status is visible
+disputed boolean flag is returned in all parcel objects.
+Gap / Caveat
+The parcel response exposes only the owner's CNIC, not their full name. The User model holds the fullName field but it is not joined to parcel detail or search responses. | Gap / Caveat
+The parcel response exposes only the owner's CNIC, not their full name. The User model holds the fullName field but it is not joined to parcel detail or search responses.
+
+=== TABLE ===
+KAN-4  View full ownership history to track previous owners | KAN-4  View full ownership history to track previous owners
+Epic | Land Records
+Status | Fully Implemented
+Backend | GET /api/parcels/:parcelId
+Acceptance Criteria | Acceptance Criteria
+✓ | Full ownership history is returned
+ownershipHistory array includes ownerCnic, acquiredAt, transferId, and note for every historical owner.
+✓ | History is accessible to citizens
+The route is public — no JWT required.
+~ | Acceptance criteria in Jira export appear mismatched
+The AC block in the PDF (seller enters buyer CNIC, etc.) is identical to KAN-6. The story title is implemented; the AC needs correcting in Jira.
+Gap / Caveat
+The acceptance criteria exported from Jira for this story are identical to KAN-6 (seller initiates transfer). This is a data-entry error in the project tracker. The story objective — viewing ownership history — is fully implemented. | Gap / Caveat
+The acceptance criteria exported from Jira for this story are identical to KAN-6 (seller initiates transfer). This is a data-entry error in the project tracker. The story objective — viewing ownership history — is fully implemented.
+
+=== TABLE ===
+KAN-6  Seller initiates land transfer by entering buyer details | KAN-6  Seller initiates land transfer by entering buyer details
+Epic | Ownership Transfer
+Status | Fully Implemented
+Backend | POST /api/transfers
+Acceptance Criteria | Acceptance Criteria
+✓ | Seller can enter buyer CNIC
+buyerCnic field in the JSON request body.
+✓ | Plot details are selected
+parcelId field in the JSON request body.
+✓ | Transfer request is created
+Returns HTTP 201 with transferId and status: pending_nadra.
+
+=== TABLE ===
+KAN-7  Buyer verifies and approves transfer | KAN-7  Buyer verifies and approves transfer
+Epic | Ownership Transfer
+Status | Partially Implemented
+Backend | POST /api/transfers/:transferId/simulate-nadra
+Acceptance Criteria | Acceptance Criteria
+✕ | Buyer can view transfer request
+No GET /api/transfers/:id endpoint is documented; buyers have no way to inspect a pending ticket.
+~ | Buyer must approve before execution
+Buyer can call simulate-nadra (same as seller), but there is no dedicated buyer-approval action.
+✓ | Transfer does not proceed without approval
+simulate-nadra must be invoked by either party before the transfer finalizes.
+Gap / Caveat
+There is no distinct buyer approval step. Buyer approval is conflated with the NADRA simulation call. Additionally, no GET endpoint exists for buyers to inspect the transfer request before acting. | Gap / Caveat
+There is no distinct buyer approval step. Buyer approval is conflated with the NADRA simulation call. Additionally, no GET endpoint exists for buyers to inspect the transfer request before acting.
+
+=== TABLE ===
+KAN-8  Biometric verification before transfer to prevent fraud | KAN-8  Biometric verification before transfer to prevent fraud
+Epic | Ownership Transfer
+Status | Partially Implemented
+Backend | POST /api/transfers/:transferId/simulate-nadra
+Acceptance Criteria | Acceptance Criteria
+~ | NADRA verification step is required
+Documented as an explicit MVP stand-in; real NADRA biometric integration is absent by design.
+✓ | Transfer only proceeds after verification
+Smart contract write and ownership update execute only after simulate-nadra is called.
+✕ | Failure stops transfer
+The simulate-nadra endpoint is documented to always succeed. No failure or rejection path is implemented.
+Gap / Caveat
+Real NADRA biometric integration is deferred. The simulation always succeeds — a rejection scenario (e.g. identity mismatch) is not handled and would not stop the transfer. | Gap / Caveat
+Real NADRA biometric integration is deferred. The simulation always succeeds — a rejection scenario (e.g. identity mismatch) is not handled and would not stop the transfer.
+
+=== TABLE ===
+KAN-9  Execute transfer automatically using smart contract | KAN-9  Execute transfer automatically using smart contract
+Epic | Ownership Transfer
+Status | Fully Implemented
+Backend | POST /api/transfers/:transferId/simulate-nadra
+Acceptance Criteria | Acceptance Criteria
+✓ | Transfer triggers after both verifications
+Finalization executes upon simulate-nadra call by either the seller or buyer.
+✓ | Ownership is updated automatically
+currentOwnerCnic updated in MongoDB immediately after the Solidity contract call.
+✓ | Transaction is recorded permanently
+LAND_TRANSFER payload written to LandLedger.sol (append-only contract); Ethereum tx hash returned to caller.
+
+=== TABLE ===
+KAN-11  Citizen uploads land-related documents so records are complete | KAN-11  Citizen uploads land-related documents so records are complete
+Epic | Document Management
+Status | Not Implemented
+Backend | None — admin-only at creation via POST /api/admin/parcels
+Acceptance Criteria | Acceptance Criteria
+✕ | User can upload title deed
+fardText is accepted only by the admin parcel-creation endpoint. No citizen upload route exists.
+✕ | User can upload mutation document
+No mutation document field or endpoint exists anywhere in the backend.
+~ | Files are stored securely
+Admin-supplied fard/registry text is written to UPLOADS_DIR on the filesystem, but this path is not citizen-accessible.
+Gap / Caveat
+There is no citizen-facing document upload endpoint. Documents can only be supplied by an admin at parcel creation. Mutation documents are not a recognised document type in the current schema. | Gap / Caveat
+There is no citizen-facing document upload endpoint. Documents can only be supplied by an admin at parcel creation. Mutation documents are not a recognised document type in the current schema.
+
+=== TABLE ===
+KAN-13  Citizen downloads verified documents for legal use | KAN-13  Citizen downloads verified documents for legal use
+Epic | Document Management
+Status | Fully Implemented
+Backend | GET /api/parcels/:parcelId/documents/{fard|registry|ownership-certificate.pdf}
+Acceptance Criteria | Acceptance Criteria
+✓ | Documents are downloadable
+Three endpoints: fard (text/plain), registry (text/plain), and an ownership certificate (application/pdf).
+✓ | File integrity is maintained
+Files are streamed directly as attachments from server storage.
+✓ | Downloaded copy is readable
+Fard and registry delivered as readable plain text; ownership certificate as a formatted PDF.
+
+=== TABLE ===
+KAN-16  Judge gets read-only access to land records to resolve disputes | KAN-16  Judge gets read-only access to land records to resolve disputes
+Epic | Audit & Court Access
+Status | Partially Implemented
+Backend | GET /api/parcels/search and GET /api/parcels/:parcelId (public, unauthenticated)
+Acceptance Criteria | Acceptance Criteria
+✓ | Judge can view full history
+ownershipHistory is included in every parcel detail response with no auth required.
+✓ | No edit option is available
+All public parcel endpoints are GET-only; no write path is exposed without an admin JWT.
+✕ | Access is restricted to authorized users
+Routes are fully public. Any anonymous user has identical access to a judge — no judge role exists.
+Gap / Caveat
+No 'judge' role exists in the system. The intended restriction to court-authorized users is not implemented. Access is effectively open to the public. | Gap / Caveat
+No 'judge' role exists in the system. The intended restriction to court-authorized users is not implemented. Access is effectively open to the public.
+
+=== TABLE ===
+KAN-17  Judge exports ownership history as PDF for court use | KAN-17  Judge exports ownership history as PDF for court use
+Epic | Audit & Court Access
+Status | Fully Implemented
+Backend | GET /api/parcels/:parcelId/documents/ownership-certificate.pdf
+Acceptance Criteria | Acceptance Criteria
+✓ | Export option is available
+PDF endpoint is publicly accessible without authentication.
+✓ | PDF contains full history
+documentService generates a PDF with parcel identity, current owner CNIC, disputed flag, and the full ownershipHistory chain.
+✓ | Format is clear and readable
+Delivered as an application/pdf attachment suitable for printing or filing.
+Gap / Caveat
+Functionally complete. Note: the endpoint carries no judge-role restriction — the access-control gap identified in KAN-16 applies here as well. | Gap / Caveat
+Functionally complete. Note: the endpoint carries no judge-role restriction — the access-control gap identified in KAN-16 applies here as well.
+
+=== TABLE ===
+KAN-19  Admin adds new land records to keep system updated | KAN-19  Admin adds new land records to keep system updated
+Epic | Admin & Control
+Status | Fully Implemented
+Backend | POST /api/admin/parcels
+Acceptance Criteria | Acceptance Criteria
+✓ | Admin can create a new record
+Requires a JWT with role: admin. Returns HTTP 201 with the full parcel object.
+✓ | Required fields must be filled
+Returns HTTP 400 if mandatory fields are absent.
+✓ | New record is stored permanently
+Persisted in MongoDB; an initial history entry is seeded; bootstrap admin creation is documented via env vars.
+
+=== TABLE ===
+KAN-20  Admin flags disputed properties so users are aware of risks | KAN-20  Admin flags disputed properties so users are aware of risks
+Epic | Admin & Control
+Status | Partially Implemented
+Backend | POST /api/admin/parcels (creation only)
+Acceptance Criteria | Acceptance Criteria
+~ | Admin can mark property as disputed
+disputed field accepted at creation. No PATCH or PUT endpoint exists to flag an already-created parcel.
+✓ | Flag is visible to users
+disputed boolean returned in all search and detail responses. Disputed parcels also block new transfer requests.
+✓ | Dispute status is saved
+Persisted in MongoDB.
+Gap / Caveat
+No update endpoint exists to change the disputed flag on an existing parcel. An admin cannot retrospectively flag a property without deleting and recreating it. | Gap / Caveat
+No update endpoint exists to change the disputed flag on an existing parcel. An admin cannot retrospectively flag a property without deleting and recreating it.
+
+=== TABLE ===
+KAN-22  Land owner notified when a transfer is initiated to prevent fraud | KAN-22  Land owner notified when a transfer is initiated to prevent fraud
+Epic | Notifications
+Status | Not Implemented
+Backend | None
+Acceptance Criteria | Acceptance Criteria
+✕ | Notification sent on transfer start
+No notification trigger exists in the transfer creation logic.
+✕ | Sent via email or SMS
+No email (SMTP) or SMS (e.g. Twilio) integration is implemented or mentioned. The User model stores an optional email field noted as reserved for 'future notifications.'
+✕ | Owner is notified immediately
+Not implemented.
+Gap / Caveat
+Entirely absent. The User model anticipates a future email field but no notification service, queue, or webhook has been built. | Gap / Caveat
+Entirely absent. The User model anticipates a future email field but no notification service, queue, or webhook has been built.
+
+=== TABLE ===
+KAN-24  All actions logged with user id and timestamp for full audit trail | KAN-24  All actions logged with user id and timestamp for full audit trail
+Epic | Non-Functional Requirements
+Status | Partially Implemented
+Backend | LandLedger.sol (on-chain append) + POST /api/blockchain/blocks
+Acceptance Criteria | Acceptance Criteria
+~ | Every action is logged
+Only transfer events (LAND_TRANSFER) are explicitly written to the blockchain. Logins, searches, admin parcel creation, and document downloads are not documented as audited.
+✓ | Log contains user id and time
+Blockchain records include actorCnic and timestamp in the LEDGER_APPEND envelope.
+✓ | Logs cannot be modified
+LandLedger.sol is an append-only Solidity smart contract; existing entries are cryptographically immutable.
+Gap / Caveat
+Audit coverage is limited to transfer events. Login sessions, search queries, admin record creation, and document downloads are not confirmed as having audit log entries. | Gap / Caveat
+Audit coverage is limited to transfer events. Login sessions, search queries, admin record creation, and document downloads are not confirmed as having audit log entries.
+
+=== TABLE ===
+KAN-25  System responds quickly so users do not waste time | KAN-25  System responds quickly so users do not waste time
+Epic | Non-Functional Requirements
+Status | Not Implemented
+Backend | Not applicable
+Acceptance Criteria | Acceptance Criteria
+✕ | Search completes within 3-4 seconds
+No performance SLA, MongoDB indexing strategy, or query optimisation is documented.
+✕ | Transfer shows progress indicator
+No server-sent events, WebSocket, or streaming progress mechanism is documented.
+✕ | No system freezing
+Not addressed anywhere in the backend documentation.
+Gap / Caveat
+No performance requirements have been implemented or documented. MongoDB index definitions, blockchain RPC timeout handling, caching strategies, and frontend progress signalling are all absent. | Gap / Caveat
+No performance requirements have been implemented or documented. MongoDB index definitions, blockchain RPC timeout handling, caching strategies, and frontend progress signalling are all absent.
+
+=== TABLE ===
+KAN-26  Strong access control so unauthorized users cannot view sensitive data | KAN-26  Strong access control so unauthorized users cannot view sensitive data
+Epic | Non-Functional Requirements
+Status | Partially Implemented
+Backend | JWT middleware on /api/auth, /api/transfers, /api/admin
+Acceptance Criteria | Acceptance Criteria
+✕ | CNIC visible only to authorized users
+GET /api/parcels/search and GET /api/parcels/:parcelId are explicitly public. CNICs are visible to any anonymous caller — a direct contradiction of this story.
+✓ | Role-based access is enforced
+citizen and admin roles are enforced. Admin routes return HTTP 403 for non-admins.
+✓ | Unauthorized access is blocked
+Protected endpoints (/api/transfers, /api/admin, /api/auth/me) return 401 or 403 without a valid JWT.
+Gap / Caveat
+CNIC data is publicly visible in parcel search and detail responses. The backend documentation explicitly marks these routes as public (per MVP intent), which directly conflicts with this story's acceptance criterion. This design decision needs a resolution from the product owner. | Gap / Caveat
+CNIC data is publicly visible in parcel search and detail responses. The backend documentation explicitly marks these routes as public (per MVP intent), which directly conflicts with this story's acceptance criterion. This design decision needs a resolution from the product owner.

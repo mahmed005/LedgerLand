@@ -1,0 +1,164 @@
+# LedgerLand Backend — Implementation Plan
+
+Build a complete Express + TypeScript (ESM) backend for the LedgerLand blockchain-backed land registry MVP, following the [backend docs](file:///d:/Projects/LedgerLand/ledgerland%20docs/backend%20docs.md) specification.
+
+## Proposed Changes
+
+Work will be executed in **7 sequential phases**. Each phase builds on the previous one.
+
+---
+
+### Phase 1 — Project Scaffolding & Configuration
+
+Set up the `backend/` directory with all tooling, configs, and environment defaults.
+
+#### [NEW] backend/package.json
+- Express, Mongoose, ethers v6, jsonwebtoken, bcryptjs, uuid, pdfkit, cors, dotenv
+- Dev: TypeScript, tsx, Hardhat, Jest, ts-jest, supertest
+- Scripts: `dev`, `build`, `start`, `compile:solidity`, `node:chain`, `deploy:local`, `test`
+
+#### [NEW] backend/tsconfig.json
+- ESM (`"module": "NodeNext"`), strict mode, output to `dist/`
+
+#### [NEW] backend/hardhat.config.ts
+- Solidity 0.8.x, Hardhat network config
+
+#### [NEW] backend/.env
+- Dev defaults for MongoDB, JWT secret, RPC URL, etc.
+
+#### [NEW] backend/.gitignore
+- `node_modules/`, `dist/`, `uploads/`, `artifacts/`, `cache/`, `.env`
+
+---
+
+### Phase 2 — Solidity Smart Contract + Deployment
+
+#### [NEW] backend/contracts/LandLedger.sol
+- Append-only ledger: `addRecord(string jsonPayload)` → stores `{author, timestamp, payload}`
+- `getRecord(uint index)` / `recordCount()` view functions
+
+#### [NEW] backend/scripts/deploy.ts  
+- Hardhat deploy script → writes contract address to `deployments/localhost.json`
+
+---
+
+### Phase 3 — MongoDB Models
+
+#### [NEW] backend/src/models/User.ts
+- Schema: `id` (UUID), `cnic` (unique, 13 digits), `passwordHash`, `fullName`, `email` (optional, partial unique index), `role` (enum: citizen/admin), timestamps
+
+#### [NEW] backend/src/models/Parcel.ts
+- Schema: `id` (UUID), `district`, `moza`, `plotNumber`, `khasra`, `currentOwnerCnic`, `disputed` (boolean), `ownershipHistory[]` (ownerCnic, acquiredAt, transferId, note), `hasFard`, `hasRegistry`, timestamps
+
+#### [NEW] backend/src/models/Transfer.ts
+- Schema: `id` (UUID), `parcelId`, `sellerCnic`, `buyerCnic`, `status` (pending_nadra / completed / rejected), `transactionHash`, timestamps
+
+---
+
+### Phase 4 — Utilities & Services
+
+#### [NEW] backend/src/utils/cnic.ts
+- `normalizeCnic(raw)` → strip non-digits, validate 13-digit length
+- `isValidCnic(raw)` → boolean
+
+#### [NEW] backend/src/services/authService.ts
+- `signup(cnic, password, fullName, email?)` → hash password, create User, return public shape
+- `login(cnic, password)` → verify, sign JWT with `{userId, cnic}`, return token + user
+- `verifyToken(token)` → decode JWT payload
+
+#### [NEW] backend/src/services/parcelService.ts
+- `search(filters)` → AND-logic, case-insensitive regex matching for text, CNIC normalization
+- `getById(id)` → single parcel or null
+- `createParcel(data, fardText?, registryText?)` → save parcel + write text files to `UPLOADS_DIR`
+- `getDocumentPath(parcelId, docType)` → returns filesystem path for fard/registry files
+
+#### [NEW] backend/src/services/transferService.ts
+- `initiateTransfer(sellerId, parcelId, buyerCnic)` → validates ownership, disputed check, duplicate pending check → create Transfer row
+- `simulateNadra(transferId, actorUserId)` → verify actor is seller or buyer, write LAND_TRANSFER to chain, update Parcel owner + history, mark Transfer completed
+
+#### [NEW] backend/src/services/ethLedgerService.ts
+- `addRecord(jsonPayload)` → call smart contract, return txHash + recordIndex
+- `getRecords()` → read all on-chain records
+- `getSummary()` → recordCount, latest block, contract address, chain status
+
+#### [NEW] backend/src/services/documentService.ts
+- `generateOwnershipCertificatePdf(parcel)` → PDFKit → returns a readable stream
+
+---
+
+### Phase 5 — Middleware & Routes
+
+#### [NEW] backend/src/middleware/auth.ts
+- `requireAuth` — extract Bearer token, verify JWT, attach `req.user`
+- `requireAdmin` — check `req.user.role === 'admin'`
+
+#### [NEW] backend/src/routes/authRoutes.ts
+- `POST /api/auth/signup`, `POST /api/auth/login`, `GET /api/auth/me`
+
+#### [NEW] backend/src/routes/parcelRoutes.ts
+- `GET /api/parcels/search` (query params), `GET /api/parcels/:parcelId`
+- `GET /api/parcels/:parcelId/documents/fard` (stream text/plain)
+- `GET /api/parcels/:parcelId/documents/registry` (stream text/plain)
+- `GET /api/parcels/:parcelId/documents/ownership-certificate.pdf` (stream PDF)
+
+#### [NEW] backend/src/routes/transferRoutes.ts
+- `POST /api/transfers` (auth required, seller)
+- `POST /api/transfers/:transferId/simulate-nadra` (auth required, seller or buyer)
+
+#### [NEW] backend/src/routes/adminRoutes.ts
+- `POST /api/admin/parcels` (admin JWT required)
+
+#### [NEW] backend/src/routes/blockchainRoutes.ts
+- `GET /api/blockchain` (public), `GET /api/blockchain/blocks` (public), `POST /api/blockchain/blocks` (auth)
+
+---
+
+### Phase 6 — App Entry Point & Bootstrap
+
+#### [NEW] backend/src/app.ts
+- Create Express app, mount middleware (cors, json, routes), `GET /health`
+
+#### [NEW] backend/src/index.ts
+- Connect MongoDB, optionally bootstrap admin user (`ADMIN_BOOTSTRAP_CNIC`), load contract address from `deployments/localhost.json`, start HTTP server
+
+---
+
+### Phase 7 — Tests
+
+#### [NEW] backend/tests/mvpAcceptance.test.ts
+- Full acceptance test suite covering all criteria from the doc:
+  - Citizen registers & logs in with CNIC
+  - Search with no filters → "No record found."
+  - Search by district/moza/plot
+  - Search by owner CNIC
+  - Parcel detail shows history + disputed
+  - Download Fard, registry, PDF certificate
+  - Seller initiates transfer; simulate NADRA completes on-chain
+  - Disputed parcel blocks new transfer
+
+#### [NEW] backend/tests/app.test.ts
+- Core smoke tests (health endpoint, auth, chain append)
+
+#### [NEW] backend/jest.config.ts
+- ESM, ts-jest, `--runInBand`
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+cd backend
+npm run compile:solidity
+# Terminal A: npm run node:chain
+# Terminal B: npm run deploy:local
+npm test
+```
+
+### Manual Verification
+1. Start dev server with `npm run dev`
+2. Test `GET /health` → `{ "status": "ok" }`
+3. Sign up, log in, create parcels, search, transfer — all via curl or frontend
+
+> [!IMPORTANT]
+> **Prerequisites**: MongoDB must be running locally on port 27017. A Hardhat local node must be running for blockchain tests and transfers.
