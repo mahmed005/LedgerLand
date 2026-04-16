@@ -11,14 +11,15 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 
 interface TransferData {
-  _id: string;
+  transferId: string;
   parcelId: string;
   sellerCnic: string;
   buyerCnic: string;
   status: string;
-  transactionHash?: string;
+  buyerApprovedAt: string | null;
+  completedAt: string | null;
+  transactionHash: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
 export default function TransferDetail() {
@@ -49,13 +50,14 @@ export default function TransferDetail() {
   const handleApprove = async () => {
     setActing(true);
     try {
-      const data = await api.post<{ status: string }>(
-        `/transfers/${transferId}/approve`
+      const data = await api.post<{
+        message: string;
+        transfer: TransferData;
+      }>(
+        `/transfers/${transferId}/buyer-approve`
       );
       showToast("Transfer approved! Awaiting NADRA verification.", "success");
-      setTransfer((prev) =>
-        prev ? { ...prev, status: data.status } : prev
-      );
+      setTransfer(data.transfer);
     } catch (err) {
       showToast(
         err instanceof ApiError ? err.message : "Approval failed",
@@ -93,7 +95,7 @@ export default function TransferDetail() {
             ? {
                 ...prev,
                 status: "completed",
-                transactionHash: data.transactionHash,
+                transactionHash: data.transactionHash ?? null,
               }
             : prev
         );
@@ -135,9 +137,20 @@ export default function TransferDetail() {
 
   const isBuyer = user?.cnic === transfer.buyerCnic;
   const isSeller = user?.cnic === transfer.sellerCnic;
-  const canApprove = isBuyer && transfer.status === "pending_buyer";
+  const canApprove =
+    isBuyer && transfer.status === "pending_nadra" && !transfer.buyerApprovedAt;
   const canNadra =
-    (isBuyer || isSeller) && transfer.status === "pending_nadra";
+    (isBuyer || isSeller) && transfer.status === "pending_nadra" && !!transfer.buyerApprovedAt;
+
+  const steps = ["buyer_approval", "nadra_verification", "completed"] as const;
+  const currentIdx =
+    transfer.status === "completed"
+      ? 2
+      : transfer.status === "nadra_failed"
+        ? 1
+        : transfer.buyerApprovedAt
+          ? 1
+          : 0;
 
   return (
     <div className="transfer-detail">
@@ -149,12 +162,10 @@ export default function TransferDetail() {
 
       {/* ── Status Timeline ── */}
       <div className="transfer-timeline glass-card">
-        {["pending_buyer", "pending_nadra", "completed"].map((step, i) => {
-          const steps = ["pending_buyer", "pending_nadra", "completed"];
-          const currentIdx = steps.indexOf(transfer.status);
-          const isRejected = transfer.status === "rejected";
-          const isActive = i <= currentIdx && !isRejected;
-          const isCurrent = step === transfer.status;
+        {steps.map((step, i) => {
+          const isFailed = transfer.status === "nadra_failed";
+          const isActive = i <= currentIdx && !(isFailed && i === 2);
+          const isCurrent = i === currentIdx;
 
           return (
             <div
@@ -165,18 +176,18 @@ export default function TransferDetail() {
                 {isActive ? "✓" : i + 1}
               </div>
               <span className="timeline-step__label">
-                {step === "pending_buyer" && "Buyer Approval"}
-                {step === "pending_nadra" && "NADRA Verification"}
+                {step === "buyer_approval" && "Buyer Approval"}
+                {step === "nadra_verification" && "NADRA Verification"}
                 {step === "completed" && "On-Chain"}
               </span>
               {i < 2 && <div className="timeline-step__line" />}
             </div>
           );
         })}
-        {transfer.status === "rejected" && (
+        {transfer.status === "nadra_failed" && (
           <div className="timeline-step timeline-step--rejected timeline-step--current">
             <div className="timeline-step__dot">✕</div>
-            <span className="timeline-step__label">Rejected</span>
+            <span className="timeline-step__label">NADRA Failed</span>
           </div>
         )}
       </div>
@@ -268,15 +279,15 @@ export default function TransferDetail() {
             </div>
           )}
 
-          {transfer.status === "rejected" && (
+          {transfer.status === "nadra_failed" && (
             <div className="action-section">
               <div className="error-banner">
-                <span>✕</span> Transfer was rejected during NADRA verification
+                <span>✕</span> Transfer failed during NADRA verification
               </div>
             </div>
           )}
 
-          {!canApprove && !canNadra && transfer.status !== "completed" && transfer.status !== "rejected" && (
+          {!canApprove && !canNadra && transfer.status !== "completed" && transfer.status !== "nadra_failed" && (
             <p className="text-muted">No actions available for your role.</p>
           )}
         </div>

@@ -4,6 +4,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   pending_buyer: { label: "Pending Buyer", color: "var(--ll-gold)" },
   pending_nadra: { label: "Pending NADRA", color: "var(--ll-blue)" },
   completed: { label: "Completed", color: "var(--ll-green)" },
+  nadra_failed: { label: "NADRA Failed", color: "var(--ll-rose)" },
   rejected: { label: "Rejected", color: "var(--ll-rose)" },
   disputed: { label: "Disputed", color: "var(--ll-rose)" },
   active: { label: "Active", color: "var(--ll-green)" },

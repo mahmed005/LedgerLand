@@ -12,7 +12,7 @@ export interface ParcelData {
   plotNumber: string;
   khasra?: string;
   currentOwnerCnic: string;
-  currentOwnerName?: string;
+  currentOwnerFullName?: string | null;
   disputed: boolean;
   hasFard?: boolean;
   hasRegistry?: boolean;
@@ -52,11 +52,11 @@ export default function ParcelCard({ parcel }: Props) {
             {parcel.currentOwnerCnic}
           </span>
         </div>
-        {parcel.currentOwnerName && (
+        {parcel.currentOwnerFullName && (
           <div className="parcel-card__field">
             <span className="parcel-card__label">Owner Name</span>
             <span className="parcel-card__value">
-              {parcel.currentOwnerName}
+              {parcel.currentOwnerFullName}
             </span>
           </div>
         )}

@@ -9,7 +9,7 @@ import { api } from "../api/client";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 interface Stats {
-  recentTransfers: number;
+  recentTransfersHint: string;
   totalRecords: string;
 }
 
@@ -21,18 +21,10 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const data: Stats = { recentTransfers: 0, totalRecords: "—" };
-
-        if (user?.role === "citizen" || user?.role === "admin") {
-          try {
-            const tRes = await api.get<{ transfers: unknown[] }>(
-              "/transfers/my"
-            );
-            data.recentTransfers = tRes.transfers.length;
-          } catch {
-            // no transfers yet
-          }
-        }
+        const data: Stats = {
+          recentTransfersHint: "Use transfer ID",
+          totalRecords: "—",
+        };
 
         try {
           const bRes = await api.get<{ blockCount?: number; recordCount?: number }>("/blockchain");
@@ -86,9 +78,9 @@ export default function Dashboard() {
         {(role === "citizen" || role === "admin") && (
           <div className="stat-card stat-card--gold">
             <div className="stat-card__value">
-              {stats?.recentTransfers ?? 0}
+              {stats?.recentTransfersHint ?? "Use transfer ID"}
             </div>
-            <div className="stat-card__label">My Transfers</div>
+            <div className="stat-card__label">Transfer Tracking</div>
           </div>
         )}
         <div className="stat-card stat-card--green">

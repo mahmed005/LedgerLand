@@ -2,34 +2,45 @@
    MyTransfers — List user's transfers with status filter
    ═══════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
+import { useToast } from "../context/ToastContext";
 import LoadingSpinner from "../components/LoadingSpinner";
 import TransferCard, { type TransferData } from "../components/TransferCard";
 import EmptyState from "../components/EmptyState";
 
-const TABS = ["all", "pending_buyer", "pending_nadra", "completed", "rejected"];
-
 export default function MyTransfers() {
-  const [transfers, setTransfers] = useState<TransferData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all");
+  const [transferId, setTransferId] = useState("");
+  const [transfer, setTransfer] = useState<TransferData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
-  useEffect(() => {
-    api
-      .get<{ transfers: TransferData[] }>("/transfers/my")
-      .then((data) => setTransfers(data.transfers))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const handleLookup = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!transferId.trim()) {
+      showToast("Enter a transfer ID", "error");
+      return;
+    }
 
-  const filtered =
-    activeTab === "all"
-      ? transfers
-      : transfers.filter((t) => t.status === activeTab);
+    setLoading(true);
+    try {
+      const data = await api.get<{ transfer: TransferData }>(
+        `/transfers/${transferId.trim()}`
+      );
+      setTransfer(data.transfer);
+    } catch (err) {
+      setTransfer(null);
+      showToast(
+        err instanceof ApiError ? err.message : "Failed to load transfer",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (loading) {
+  if (loading && !transfer) {
     return (
       <div className="page-center">
         <LoadingSpinner />
@@ -43,9 +54,9 @@ export default function MyTransfers() {
         <div className="page-header__row">
           <div>
             <h1>
-              My <span className="gradient-text">Transfers</span>
+              Transfer <span className="gradient-text">Lookup</span>
             </h1>
-            <p>View and manage your property transfers</p>
+            <p>Fetch a transfer by its ID and perform buyer/NADRA actions</p>
           </div>
           <Link to="/transfers/new" className="btn btn--primary">
             + New Transfer
@@ -53,42 +64,32 @@ export default function MyTransfers() {
         </div>
       </div>
 
-      {/* ── Status Tabs ── */}
-      <div className="tabs">
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            className={`tab${activeTab === tab ? " tab--active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab === "all"
-              ? "All"
-              : tab
-                  .replace("_", " ")
-                  .replace(/\b\w/g, (c) => c.toUpperCase())}
-            {tab === "all" && (
-              <span className="tab__count">{transfers.length}</span>
-            )}
+      <form onSubmit={handleLookup} className="search-form glass-card">
+        <div className="search-form__fields search-form__fields--inline">
+          <div className="form-group" style={{ flex: 1 }}>
+            <input
+              type="text"
+              className="form-input"
+              value={transferId}
+              onChange={(e) => setTransferId(e.target.value)}
+              placeholder="Enter transfer ID"
+            />
+          </div>
+          <button type="submit" className="btn btn--primary" disabled={loading}>
+            {loading ? "Loading…" : "Open Transfer"}
           </button>
-        ))}
-      </div>
+        </div>
+      </form>
 
-      {/* ── Transfer List ── */}
-      {filtered.length === 0 ? (
+      {!transfer ? (
         <EmptyState
           icon="📋"
-          title="No transfers found"
-          message={
-            activeTab === "all"
-              ? "You haven't initiated or received any transfers yet."
-              : `No ${activeTab.replace("_", " ")} transfers.`
-          }
+          title="No transfer loaded"
+          message="Use the transfer ID returned by POST /api/transfers to view details."
         />
       ) : (
         <div className="transfers-list">
-          {filtered.map((t) => (
-            <TransferCard key={t._id} transfer={t} />
-          ))}
+          <TransferCard key={transfer.transferId} transfer={transfer} />
         </div>
       )}
     </div>

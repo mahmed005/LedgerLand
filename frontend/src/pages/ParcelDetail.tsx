@@ -13,6 +13,7 @@ import StatusBadge from "../components/StatusBadge";
 
 interface OwnershipEntry {
   ownerCnic: string;
+  ownerFullName?: string | null;
   acquiredAt: string;
   transferId: string | null;
   note: string;
@@ -25,7 +26,7 @@ interface ParcelData {
   plotNumber: string;
   khasra: string;
   currentOwnerCnic: string;
-  currentOwnerName?: string;
+  currentOwnerFullName?: string | null;
   disputed: boolean;
   ownershipHistory: OwnershipEntry[];
   hasFard: boolean;
@@ -41,6 +42,7 @@ export default function ParcelDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadKind, setUploadKind] = useState<"fard" | "registry" | "mutation">("fard");
 
   const fileRef = useRef<HTMLInputElement>(null);
   const { user, isAuthenticated } = useAuth();
@@ -86,11 +88,11 @@ export default function ParcelDetail() {
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append("document", file);
-      formData.append("type", "fard"); // default to fard, can be extended
+      formData.append("file", file);
+      formData.append("kind", uploadKind);
 
       await api.post(`/parcels/${parcelId}/documents/upload`, formData);
-      showToast("Document uploaded successfully", "success");
+      showToast(`${uploadKind} uploaded successfully`, "success");
       // Refresh parcel data
       const data = await api.get<{ parcel: ParcelData }>(
         `/parcels/${parcelId}`
@@ -173,11 +175,11 @@ export default function ParcelDetail() {
                 {parcel.currentOwnerCnic}
               </span>
             </div>
-            {parcel.currentOwnerName && (
+            {parcel.currentOwnerFullName && (
               <div className="detail-card__field">
                 <span className="detail-card__label">Name</span>
                 <span className="detail-card__value">
-                  {parcel.currentOwnerName}
+                  {parcel.currentOwnerFullName}
                 </span>
               </div>
             )}
@@ -231,6 +233,22 @@ export default function ParcelDetail() {
 
           {isAuthenticated && (
             <div className="upload-section">
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label htmlFor="upload-kind">Document Type</label>
+                <select
+                  id="upload-kind"
+                  className="form-input"
+                  value={uploadKind}
+                  onChange={(e) =>
+                    setUploadKind(e.target.value as "fard" | "registry" | "mutation")
+                  }
+                  disabled={uploading}
+                >
+                  <option value="fard">Fard</option>
+                  <option value="registry">Registry</option>
+                  <option value="mutation">Mutation</option>
+                </select>
+              </div>
               <label className="btn btn--outline upload-btn">
                 {uploading ? "Uploading…" : "📤 Upload Document"}
                 <input
@@ -264,6 +282,9 @@ export default function ParcelDetail() {
                     })}
                   </span>
                 </div>
+                {entry.ownerFullName && (
+                  <p className="history-item__note">Owner: {entry.ownerFullName}</p>
+                )}
                 <p className="history-item__note">{entry.note}</p>
                 {entry.transferId && (
                   <Link

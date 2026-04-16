@@ -6,11 +6,14 @@ import { Link } from "react-router-dom";
 import StatusBadge from "./StatusBadge";
 
 export interface TransferData {
-  _id: string;
+  transferId: string;
   parcelId: string;
   sellerCnic: string;
   buyerCnic: string;
   status: string;
+  buyerApprovedAt: string | null;
+  completedAt: string | null;
+  transactionHash: string | null;
   createdAt: string;
 }
 
@@ -21,7 +24,7 @@ interface Props {
 export default function TransferCard({ transfer }: Props) {
   return (
     <Link
-      to={`/transfers/${transfer._id}`}
+      to={`/transfers/${transfer.transferId}`}
       className="transfer-row glass-card"
     >
       <div className="transfer-row__main">

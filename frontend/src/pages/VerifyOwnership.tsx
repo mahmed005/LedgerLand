@@ -9,6 +9,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../context/ToastContext";
+import { useAuth } from "../context/AuthContext";
 import CnicInput from "../components/CnicInput";
 import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -23,10 +24,11 @@ interface VerifyResult {
     plotNumber: string;
     khasra?: string;
     currentOwnerCnic: string;
-    currentOwnerName?: string;
+    currentOwnerFullName?: string | null;
     disputed: boolean;
     hasFard?: boolean;
     hasRegistry?: boolean;
+    hasMutation?: boolean;
   };
   message?: string;
 }
@@ -39,6 +41,7 @@ export default function VerifyOwnership() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<VerifyResult[] | null>(null);
   const { showToast } = useToast();
+  const { isAuthenticated } = useAuth();
 
   const handleVerify = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,6 +51,11 @@ export default function VerifyOwnership() {
     try {
       let query = "";
       if (mode === "cnic") {
+        if (!isAuthenticated) {
+          showToast("Sign in is required to search by owner CNIC", "error");
+          setLoading(false);
+          return;
+        }
         if (cnic.length !== 13) {
           showToast("Please enter a valid 13-digit CNIC", "error");
           setLoading(false);
@@ -200,7 +208,7 @@ export default function VerifyOwnership() {
                   <div className="verify-card__row">
                     <span className="verify-card__label">👤 Current Owner</span>
                     <span className="verify-card__value">
-                      {r.parcel.currentOwnerName || r.parcel.currentOwnerCnic}
+                      {r.parcel.currentOwnerFullName || r.parcel.currentOwnerCnic}
                     </span>
                   </div>
                   <div className="verify-card__row">
@@ -208,7 +216,8 @@ export default function VerifyOwnership() {
                     <span className="verify-card__value verify-card__docs">
                       {r.parcel.hasFard && <span className="doc-tag">Fard</span>}
                       {r.parcel.hasRegistry && <span className="doc-tag">Registry</span>}
-                      {!r.parcel.hasFard && !r.parcel.hasRegistry && (
+                      {r.parcel.hasMutation && <span className="doc-tag">Mutation</span>}
+                      {!r.parcel.hasFard && !r.parcel.hasRegistry && !r.parcel.hasMutation && (
                         <span className="text-muted">None on file</span>
                       )}
                     </span>

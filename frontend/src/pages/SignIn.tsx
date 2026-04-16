@@ -141,7 +141,7 @@ export default function SignIn() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               required
-              minLength={6}
+              minLength={8}
             />
           </div>
 

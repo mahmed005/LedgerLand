@@ -28,8 +28,8 @@ export default function SignUp() {
       showToast("CNIC must be 13 digits", "error");
       return;
     }
-    if (password.length < 6) {
-      showToast("Password must be at least 6 characters", "error");
+    if (password.length < 8) {
+      showToast("Password must be at least 8 characters", "error");
       return;
     }
     if (password !== confirmPassword) {
@@ -128,9 +128,9 @@ export default function SignUp() {
                 className="form-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 6 characters"
+                placeholder="Min. 8 characters"
                 required
-                minLength={6}
+                minLength={8}
               />
             </div>
             <div className="form-group">
