@@ -499,6 +499,11 @@
   gap: 16px;
 }
 
+.form-row > .form-group {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .form-optional {
   font-weight: 400;
   color: var(--ll-text);

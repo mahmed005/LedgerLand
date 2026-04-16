@@ -149,11 +149,6 @@ export default function SignIn() {
             type="submit"
             className="btn btn--primary btn--full"
             disabled={loading}
-            style={
-              {
-                background: `linear-gradient(135deg, ${info.color}, ${info.color}88)`,
-              } as React.CSSProperties
-            }
           >
             {loading
               ? "Signing in…"

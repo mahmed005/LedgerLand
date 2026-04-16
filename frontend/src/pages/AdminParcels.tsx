@@ -2,7 +2,7 @@
    AdminParcels — Search + manage parcels (toggle disputed)
    ═══════════════════════════════════════════════════════ */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../context/ToastContext";
@@ -26,28 +26,33 @@ export default function AdminParcels() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const { showToast } = useToast();
 
+  useEffect(() => {
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const data = await api.get<{ parcels: Parcel[] }>("/admin/parcels");
+        setParcels(data.parcels);
+      } catch (err) {
+        showToast(
+          err instanceof ApiError ? err.message : "Failed to load parcels",
+          "error"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAll();
+  }, [showToast]);
+
+  const filteredParcels = useMemo(() => {
+    const q = district.trim().toLowerCase();
+    if (!q) return parcels;
+    return parcels.filter((p) => p.district.toLowerCase().includes(q));
+  }, [parcels, district]);
+
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
-    if (!district.trim()) {
-      showToast("Enter a district to search", "error");
-      return;
-    }
-
-    setLoading(true);
     setSearched(true);
-    try {
-      const data = await api.get<{ parcels: Parcel[] }>(
-        `/parcels/search?district=${encodeURIComponent(district.trim())}`
-      );
-      setParcels(data.parcels);
-    } catch (err) {
-      showToast(
-        err instanceof ApiError ? err.message : "Search failed",
-        "error"
-      );
-    } finally {
-      setLoading(false);
-    }
   };
 
   const toggleDisputed = async (parcel: Parcel) => {
@@ -114,7 +119,7 @@ export default function AdminParcels() {
         </div>
       )}
 
-      {searched && !loading && parcels.length === 0 && (
+      {searched && !loading && filteredParcels.length === 0 && (
         <div className="empty-state">
           <div className="empty-state__icon">📋</div>
           <h3>No parcels found</h3>
@@ -122,7 +127,7 @@ export default function AdminParcels() {
         </div>
       )}
 
-      {parcels.length > 0 && !loading && (
+      {filteredParcels.length > 0 && !loading && (
         <div className="admin-table-wrap glass-card">
           <table className="admin-table">
             <thead>
@@ -136,7 +141,7 @@ export default function AdminParcels() {
               </tr>
             </thead>
             <tbody>
-              {parcels.map((p) => (
+              {filteredParcels.map((p) => (
                 <tr key={p.id}>
                   <td>{p.district}</td>
                   <td>{p.moza}</td>

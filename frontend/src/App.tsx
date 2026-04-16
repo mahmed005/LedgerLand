@@ -8,6 +8,7 @@ import { ToastProvider } from "./context/ToastContext";
 
 // Components
 import Layout from "./components/Layout";
+import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
 
@@ -34,6 +35,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <Navbar />
         <Routes>
           {/* ── Public routes (no layout shell) ── */}
           <Route path="/" element={<LandingPage />} />
@@ -51,13 +53,15 @@ function App() {
               {/* Dashboard — all roles */}
               <Route path="/dashboard" element={<Dashboard />} />
 
-              {/* Transfers — citizen + admin */}
-              <Route path="/transfers" element={<MyTransfers />} />
-              <Route path="/transfers/new" element={<InitiateTransfer />} />
-              <Route
-                path="/transfers/:transferId"
-                element={<TransferDetail />}
-              />
+              {/* Transfers — citizen only */}
+              <Route element={<RoleGuard allowedRoles={["citizen"]} />}>
+                <Route path="/transfers" element={<MyTransfers />} />
+                <Route path="/transfers/new" element={<InitiateTransfer />} />
+                <Route
+                  path="/transfers/:transferId"
+                  element={<TransferDetail />}
+                />
+              </Route>
 
               {/* Admin-only routes */}
               <Route element={<RoleGuard allowedRoles={["admin"]} />}>
@@ -74,7 +78,7 @@ function App() {
             </Route>
           </Route>
 
-          {/* ── Audit Trail — admin + judge only (outside layout, has Navbar) ── */}
+          {/* ── Audit Trail — admin + judge only (outside layout) ── */}
           <Route path="/blockchain" element={<BlockchainExplorer />} />
 
           {/* ── 404 ── */}

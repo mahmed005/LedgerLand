@@ -99,6 +99,22 @@ export class TransferService {
   }
 
   /**
+   * Lists all transfers where the caller is buyer or seller.
+   *
+   * @param actorCnic - Authenticated CNIC.
+   * @returns Transfers sorted newest-first.
+   */
+  async listTransfersForParty(actorCnic: string): Promise<TransferPublicView[]> {
+    const actor = normalizeCnic(actorCnic);
+    const rows = await TransferModel.find({
+      $or: [{ sellerCnic: actor }, { buyerCnic: actor }],
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    return rows.map((t) => toTransferPublic(t));
+  }
+
+  /**
    * Records **buyer approval** for a pending transfer. Idempotent when already approved.
    *
    * @param transferId - Ticket id.

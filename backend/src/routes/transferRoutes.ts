@@ -84,6 +84,21 @@ export function createTransferRouter(deps: TransferRouterDeps): Router {
   });
 
   /**
+   * **`GET /api/transfers/my`**
+   *
+   * Returns all transfers where the caller is either the seller or buyer.
+   */
+  router.get("/my", async (req, res) => {
+    try {
+      const actor = normalizeCnic(req.user!.cnic);
+      const list = await transfers.listTransfersForParty(actor);
+      res.json({ transfers: list });
+    } catch {
+      res.status(500).json({ error: "Failed to load transfers" });
+    }
+  });
+
+  /**
    * **`GET /api/transfers/:transferId`**
    *
    * Returns ticket details when the caller is the **seller or buyer** (inspection before approval / NADRA).

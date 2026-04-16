@@ -3,11 +3,16 @@
    Used on public pages: Search, ParcelDetail, Blockchain
    ═══════════════════════════════════════════════════════ */
 
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuth();
+  const { pathname } = useLocation();
+
+  if (pathname === "/") {
+    return null;
+  }
 
   return (
     <header className="app-navbar">

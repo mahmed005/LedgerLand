@@ -131,7 +131,7 @@ export default function Layout() {
             )}
           </div>
 
-          {(role === "citizen" || role === "admin") && (
+          {role === "citizen" && (
             <div className="sidebar__group">
               <span className="sidebar__group-label">Transfers</span>
               <NavLink

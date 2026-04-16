@@ -7,7 +7,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import Navbar from "../components/Navbar";
 import CnicInput from "../components/CnicInput";
 import ParcelCard, { type ParcelData } from "../components/ParcelCard";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -68,7 +67,6 @@ export default function SearchParcels() {
 
   return (
     <>
-      <Navbar />
       <div className="public-page">
         <div className="search-page">
           <div className="page-header">

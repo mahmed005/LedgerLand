@@ -1,0 +1,102 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Consolas;}}
+\fs24
+\b LedgerLand Full Project Report\b0\par
+Assessment date: 2026-04-16\par
+\par
+\b 1. Executive Summary\b0\par
+LedgerLand is a full-stack land registry MVP built with React (frontend), Express plus MongoDB (backend), and a Solidity append-only ledger (Hardhat + ethers). The product supports CNIC-based authentication, parcel search/detail, document uploads/downloads, ownership certificates, transfer lifecycle with NADRA simulation, admin operations, judge/court read APIs, and audit trails in both MongoDB and blockchain records.\par
+\par
+\b 2. Architecture Overview\b0\par
+- Frontend: React + TypeScript + Vite + React Router, role-aware routing and dashboards.\par
+- Backend: Express + TypeScript + Mongoose + JWT + file handling with multer/pdfkit.\par
+- Blockchain: Solidity LandLedger contract with ethers adapter for append/read operations.\par
+- Integration flow: Frontend calls /api routes, backend persists to MongoDB and appends critical records to chain.\par
+\par
+\b 3. Core Backend Modules\b0\par
+- App bootstrap and composition: src/index.ts, src/app.ts\par
+- Auth: src/auth/authService.ts, src/auth/authRoutes.ts, src/auth/authMiddleware.ts\par
+- Domain models: src/models/User.ts, Parcel.ts, Transfer.ts, AuditLog.ts\par
+- Services: parcelService.ts, transferService.ts, documentService.ts, auditService.ts, notificationService.ts\par
+- Routes: auth, parcels, citizen parcels, court, transfers, admin, blockchain\par
+\par
+\b 4. Data Model Summary\b0\par
+\b User\b0: id, cnic, email, passwordHash, fullName, role(citizen/admin/judge), createdAt\par
+\b Parcel\b0: id, district/moza/plotNumber/khasra, currentOwnerCnic, disputed, ownershipHistory, fard/registry/mutation paths, timestamps\par
+\b Transfer\b0: transferId, parcelId, sellerCnic, buyerCnic, status(pending_nadra/completed/cancelled/nadra_failed), buyerApprovedAt, completedAt, transactionHash\par
+\b AuditLog\b0: action, actorUserId, actorCnic, recordedAt, metadata\par
+\par
+\b 5. Security and RBAC\b0\par
+- JWT required for protected routes.\par
+- Optional auth middleware enables anonymous parcel read with redaction.\par
+- Parcel-sensitive RBAC: unauthorized users see owner CNIC and names redacted.\par
+- ownerCnic search filter is role-gated: anonymous blocked, citizen limited to own CNIC, admin/judge unrestricted.\par
+- Judge is read-only for parcel uploads; owner-or-admin upload policy enforced.\par
+\par
+\b 6. Functional Workflows\b0\par
+\b 6.1 Authentication\b0\par
+- Signup with CNIC + password + fullName.\par
+- Login returns JWT token and public user profile.\par
+- Me endpoint rehydrates current session state.\par
+\par
+\b 6.2 Parcel Lifecycle\b0\par
+- Admin creates parcel with optional initial documents.\par
+- Search supports district/moza/plot/owner filters (AND semantics).\par
+- Parcel detail shows ownership history and dispute state with RBAC projection.\par
+- Admin can toggle disputed flag.\par
+\par
+\b 6.3 Transfer Lifecycle\b0\par
+- Only current owner can initiate transfer.\par
+- Buyer approval required before NADRA simulation.\par
+- simulate-nadra verified=true: writes LAND_TRANSFER on-chain, updates owner/history in MongoDB.\par
+- simulate-nadra verified=false: marks nadra_failed, no owner change, no chain transfer write.\par
+- User transfer list endpoint available at GET /api/transfers/my.\par
+\par
+\b 6.4 Documents and Certificates\b0\par
+- Upload kinds: fard, registry, mutation via JSON or multipart route.\par
+- Downloads require entitlement and JWT for sensitive docs.\par
+- Ownership certificate generated as PDF from parcel view.\par
+\par
+\b 6.5 Blockchain and Audit\b0\par
+- Blockchain summary and record listing routes available.\par
+- Generic append endpoint wraps payload with actor metadata.\par
+- Audit service records login, transfer milestones, admin updates, and document uploads.\par
+\par
+\b 7. Frontend UX and Routing\b0\par
+- Global Navbar and protected routes are active.\par
+- RoleGuard enforces admin/citizen-specific screens.\par
+- Dashboard shows role-aware actions and total record cards.\par
+- My Transfers now auto-loads user-linked transfers and supports client-side transferId filtering.\par
+- Verify Ownership page now supports direct parcelId lookup for immediate ownership visibility.\par
+\par
+\b 8. Testing and Quality\b0\par
+- Backend has strong automated test coverage:\par
+  - Acceptance tests for interview criteria\par
+  - Extended feature tests\par
+  - Parcel RBAC tests\par
+  - Auth service tests\par
+  - Core API integration tests\par
+  - Ledger adapter tests\par
+- Frontend currently has no automated tests (primary quality gap).\par
+\par
+\b 9. Strengths\b0\par
+- Clear service boundaries and maintainable architecture.\par
+- Strong RBAC implementation for sensitive parcel data.\par
+- Good domain test coverage on backend.\par
+- Practical blockchain integration for immutable event traceability.\par
+\par
+\b 10. Gaps and Risks\b0\par
+- Frontend regression risk due to missing test suite.\par
+- Production hardening gaps: no explicit rate limiting/security headers/pagination strategy.\par
+- Judge provisioning currently environment-variable based only.\par
+- Frontend README is generic Vite template and not product-specific.\par
+\par
+\b 11. Recommendations\b0\par
+1. Add frontend automated tests for auth, transfers, parcel detail, and admin flows.\par
+2. Add API hardening middleware: rate limiting, security headers, request-size controls.\par
+3. Add pagination to parcels, transfers, and blockchain list endpoints.\par
+4. Implement secure admin-managed judge provisioning flow.\par
+5. Update frontend README and release documentation for current behavior.\par
+\par
+\b End of Report\b0\par
+}

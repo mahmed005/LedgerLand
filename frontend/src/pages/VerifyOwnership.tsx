@@ -9,9 +9,6 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useToast } from "../context/ToastContext";
-import { useAuth } from "../context/AuthContext";
-import CnicInput from "../components/CnicInput";
-import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 
@@ -34,14 +31,10 @@ interface VerifyResult {
 }
 
 export default function VerifyOwnership() {
-  const [mode, setMode] = useState<"parcel" | "cnic">("cnic");
-  const [cnic, setCnic] = useState("");
-  const [district, setDistrict] = useState("");
-  const [plotNumber, setPlotNumber] = useState("");
+  const [parcelId, setParcelId] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<VerifyResult[] | null>(null);
   const { showToast } = useToast();
-  const { isAuthenticated } = useAuth();
 
   const handleVerify = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,47 +42,31 @@ export default function VerifyOwnership() {
     setResults(null);
 
     try {
-      let query = "";
-      if (mode === "cnic") {
-        if (!isAuthenticated) {
-          showToast("Sign in is required to search by owner CNIC", "error");
-          setLoading(false);
-          return;
-        }
-        if (cnic.length !== 13) {
-          showToast("Please enter a valid 13-digit CNIC", "error");
-          setLoading(false);
-          return;
-        }
-        query = `ownerCnic=${cnic}`;
-      } else {
-        if (!district.trim() || !plotNumber.trim()) {
-          showToast("Please enter both district and plot number", "error");
-          setLoading(false);
-          return;
-        }
-        query = `district=${encodeURIComponent(district.trim())}&plotNumber=${encodeURIComponent(plotNumber.trim())}`;
+      if (!parcelId.trim()) {
+        showToast("Please enter a parcel ID", "error");
+        setLoading(false);
+        return;
       }
 
-      const data = await api.get<{ found: boolean; parcels: VerifyResult["parcel"][] }>(
-        `/parcels/search?${query}`
+      const data = await api.get<{ parcel: VerifyResult["parcel"] }>(
+        `/parcels/${encodeURIComponent(parcelId.trim())}`
       );
-
-      if (data.found && data.parcels.length > 0) {
-        setResults(
-          data.parcels.map((p) => ({
-            verified: true,
-            parcel: p,
-          }))
-        );
-      } else {
-        setResults([{ verified: false, message: "No matching property records found." }]);
-      }
+      setResults([
+        {
+          verified: true,
+          parcel: data.parcel,
+        },
+      ]);
     } catch (err) {
-      showToast(
-        err instanceof ApiError ? err.message : "Verification failed",
-        "error"
-      );
+      if (err instanceof ApiError) {
+        if (err.status === 404) {
+          setResults([{ verified: false, message: "No record found for this parcel ID." }]);
+        } else {
+          showToast(err.message, "error");
+        }
+      } else {
+        showToast("Verification failed", "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -97,72 +74,30 @@ export default function VerifyOwnership() {
 
   return (
     <>
-    <Navbar />
     <div className="public-page">
     <div className="verify-page">
       <div className="page-header">
         <h1>
           Verify <span className="gradient-text">Ownership</span>
         </h1>
-        <p>Check if a property is registered and verify the current owner</p>
-      </div>
-
-      {/* ── Mode Toggle ── */}
-      <div className="verify-modes">
-        <button
-          className={`verify-mode${mode === "cnic" ? " verify-mode--active" : ""}`}
-          onClick={() => setMode("cnic")}
-          type="button"
-        >
-          <span className="verify-mode__icon">👤</span>
-          <span>Search by Owner CNIC</span>
-        </button>
-        <button
-          className={`verify-mode${mode === "parcel" ? " verify-mode--active" : ""}`}
-          onClick={() => setMode("parcel")}
-          type="button"
-        >
-          <span className="verify-mode__icon">📍</span>
-          <span>Search by Property Details</span>
-        </button>
+        <p>Enter parcel ID to directly view current ownership details</p>
       </div>
 
       {/* ── Search Form ── */}
       <form onSubmit={handleVerify} className="verify-form glass-card">
-        {mode === "cnic" ? (
-          <div className="form-group">
-            <label htmlFor="verify-cnic">Owner CNIC Number</label>
-            <CnicInput value={cnic} onChange={setCnic} id="verify-cnic" required />
-            <span className="form-hint">Enter the 13-digit CNIC of the property owner</span>
-          </div>
-        ) : (
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="verify-district">District</label>
-              <input
-                type="text"
-                id="verify-district"
-                className="form-input"
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                placeholder="e.g. Lahore"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="verify-plot">Plot Number</label>
-              <input
-                type="text"
-                id="verify-plot"
-                className="form-input"
-                value={plotNumber}
-                onChange={(e) => setPlotNumber(e.target.value)}
-                placeholder="e.g. P-42"
-                required
-              />
-            </div>
-          </div>
-        )}
+        <div className="form-group">
+          <label htmlFor="verify-parcel-id">Parcel ID</label>
+          <input
+            type="text"
+            id="verify-parcel-id"
+            className="form-input"
+            value={parcelId}
+            onChange={(e) => setParcelId(e.target.value)}
+            placeholder="Enter parcel ID"
+            required
+          />
+          <span className="form-hint">Ownership details are shown directly for this parcel</span>
+        </div>
         <button type="submit" className="btn btn--primary btn--full" disabled={loading}>
           {loading ? "Verifying…" : "🔍 Verify Ownership"}
         </button>
@@ -263,11 +198,11 @@ export default function VerifyOwnership() {
         <div className="verify-info__steps">
           <div className="verify-info__step">
             <span className="verify-info__num">1</span>
-            <p>Enter the owner's CNIC or property location details</p>
+            <p>Enter the parcel ID</p>
           </div>
           <div className="verify-info__step">
             <span className="verify-info__num">2</span>
-            <p>Our system checks the registered land records database</p>
+            <p>Our system loads the registered ownership record</p>
           </div>
           <div className="verify-info__step">
             <span className="verify-info__num">3</span>

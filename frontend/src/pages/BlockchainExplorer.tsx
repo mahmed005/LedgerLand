@@ -5,7 +5,6 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 interface ChainSummary {
@@ -65,7 +64,6 @@ export default function BlockchainExplorer() {
   if (loading) {
     return (
       <>
-        <Navbar />
         <div className="public-page">
           <div className="page-center">
             <LoadingSpinner />
@@ -77,7 +75,6 @@ export default function BlockchainExplorer() {
 
   return (
     <>
-    <Navbar />
     <div className="public-page">
     <div className="blockchain-page">
       <div className="page-header">

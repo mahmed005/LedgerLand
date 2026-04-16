@@ -7,7 +7,6 @@ import { useParams, Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
-import Navbar from "../components/Navbar";
 import LoadingSpinner from "../components/LoadingSpinner";
 import StatusBadge from "../components/StatusBadge";
 
@@ -111,7 +110,6 @@ export default function ParcelDetail() {
   if (loading) {
     return (
       <>
-        <Navbar />
         <div className="public-page">
           <div className="page-center">
             <LoadingSpinner />
@@ -124,7 +122,6 @@ export default function ParcelDetail() {
   if (error || !parcel) {
     return (
       <>
-        <Navbar />
         <div className="public-page">
           <div className="page-center">
             <div className="empty-state">
@@ -145,7 +142,6 @@ export default function ParcelDetail() {
 
   return (
     <>
-    <Navbar />
     <div className="public-page">
     <div className="parcel-detail">
       {/* ── Header ── */}
@@ -156,6 +152,22 @@ export default function ParcelDetail() {
               {parcel.district} / {parcel.moza}
             </h1>
             <p>Plot {parcel.plotNumber}{parcel.khasra ? ` · Khasra ${parcel.khasra}` : ""}</p>
+            <p style={{ marginTop: 10 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  background: "rgba(255, 193, 7, 0.18)",
+                  border: "1px solid rgba(255, 193, 7, 0.55)",
+                  color: "var(--ll-white)",
+                  fontFamily: "var(--ll-font-mono)",
+                  fontWeight: 700,
+                }}
+              >
+                Parcel ID: {parcel.id}
+              </span>
+            </p>
           </div>
           <div className="page-header__badges">
             {parcel.disputed && <StatusBadge status="disputed" />}

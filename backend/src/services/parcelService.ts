@@ -170,6 +170,17 @@ export class ParcelService {
   }
 
   /**
+   * Lists all parcels for administrative screens.
+   *
+   * @returns Every parcel sorted by district/moza/plot.
+   */
+  async listParcels(): Promise<ParcelPublicView[]> {
+    const docs = await ParcelModel.find({}).sort({ district: 1, moza: 1, plotNumber: 1 }).lean();
+    const views = docs.map((d) => toPublic(JSON.parse(JSON.stringify(d)) as ParcelLean));
+    return Promise.all(views.map((v) => this.withOwnerNames(v)));
+  }
+
+  /**
    * Loads a parcel by identifier.
    *
    * @param parcelId - Parcel primary key.

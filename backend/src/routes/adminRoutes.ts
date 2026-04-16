@@ -22,6 +22,20 @@ export function createAdminRouter(
   router.use(requireAdmin);
 
   /**
+   * **`GET /api/admin/parcels`**
+   *
+   * Lists all parcels for admin management screens.
+   */
+  router.get("/parcels", async (_req, res) => {
+    try {
+      const list = await parcels.listParcels();
+      res.json({ parcels: list });
+    } catch {
+      res.status(500).json({ error: "Failed to load parcels" });
+    }
+  });
+
+  /**
    * **`POST /api/admin/parcels`**
    *
    * **Registers a new parcel** with location fields, current owner CNIC, optional khasra and

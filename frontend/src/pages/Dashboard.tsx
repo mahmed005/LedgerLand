@@ -22,13 +22,24 @@ export default function Dashboard() {
     const fetchStats = async () => {
       try {
         const data: Stats = {
-          recentTransfersHint: "Use transfer ID",
+          recentTransfersHint: "Auto-listed",
           totalRecords: "—",
         };
 
         try {
-          const bRes = await api.get<{ blockCount?: number; recordCount?: number }>("/blockchain");
-          data.totalRecords = String(bRes.recordCount ?? bRes.blockCount ?? "—");
+          const [summary, blocks] = await Promise.allSettled([
+            api.get<{ blockCount?: number; recordCount?: number }>("/blockchain"),
+            api.get<{ blocks: unknown[] }>("/blockchain/blocks"),
+          ]);
+
+          const summaryCount =
+            summary.status === "fulfilled"
+              ? summary.value.recordCount ?? summary.value.blockCount
+              : undefined;
+          const blocksCount =
+            blocks.status === "fulfilled" ? blocks.value.blocks.length : undefined;
+
+          data.totalRecords = String(summaryCount ?? blocksCount ?? 0);
         } catch {
           // blockchain not available
         }
@@ -75,10 +86,10 @@ export default function Dashboard() {
             {role.charAt(0).toUpperCase() + role.slice(1)} Account
           </div>
         </div>
-        {(role === "citizen" || role === "admin") && (
+        {role === "citizen" && (
           <div className="stat-card stat-card--gold">
             <div className="stat-card__value">
-              {stats?.recentTransfersHint ?? "Use transfer ID"}
+              {stats?.recentTransfersHint ?? "Auto-listed"}
             </div>
             <div className="stat-card__label">Transfer Tracking</div>
           </div>
@@ -87,12 +98,10 @@ export default function Dashboard() {
           <div className="stat-card__value">🔒</div>
           <div className="stat-card__label">Records Secured</div>
         </div>
-        {(role === "admin" || role === "judge") && (
-          <div className="stat-card stat-card--blue">
-            <div className="stat-card__value">{stats?.totalRecords ?? "—"}</div>
-            <div className="stat-card__label">Total Records</div>
-          </div>
-        )}
+        <div className="stat-card stat-card--blue">
+          <div className="stat-card__value">{stats?.totalRecords ?? "0"}</div>
+          <div className="stat-card__label">Total Records</div>
+        </div>
       </div>
 
       {/* ── Quick Actions ── */}
@@ -148,12 +157,6 @@ export default function Dashboard() {
                 <div className="action-card__icon action-card__icon--violet">⚖️</div>
                 <h3>Create Judge Account</h3>
                 <p>Register a new judicial authority with read-only access</p>
-              </Link>
-
-              <Link to="/transfers" className="action-card">
-                <div className="action-card__icon action-card__icon--blue">↗</div>
-                <h3>My Transfers</h3>
-                <p>View and manage property transfers</p>
               </Link>
 
               <Link to="/search" className="action-card">
