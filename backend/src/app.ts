@@ -1,80 +1,195 @@
-import express from "express";
-import type { EthLedgerService } from "./ledger/ethLedgerService.js";
-import { createAuthMiddleware, createOptionalAuthMiddleware } from "./auth/authMiddleware.js";
-import { createAuthRouter } from "./auth/authRoutes.js";
-import type { AuthService } from "./auth/authService.js";
-import { MongoUserRepository } from "./auth/userRepository.js";
-import { createBlockchainRouter } from "./routes/blockchainRoutes.js";
-import { createParcelRouter } from "./routes/parcelRoutes.js";
-import { createTransferRouter } from "./routes/transferRoutes.js";
-import { createAdminRouter } from "./routes/adminRoutes.js";
-import { createCitizenParcelRouter } from "./routes/citizenParcelRoutes.js";
-import { createCourtRouter } from "./routes/courtRoutes.js";
-import type { ParcelService } from "./services/parcelService.js";
-import type { TransferService } from "./services/transferService.js";
-import { AuditService } from "./services/auditService.js";
-import { NotificationService } from "./services/notificationService.js";
+import express, { type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
 
-export interface AppDependencies {
-  ledger: EthLedgerService;
-  authService: AuthService;
-  parcelService: ParcelService;
-  transferService: TransferService;
-  /** When omitted, a default {@link AuditService} and {@link NotificationService} are constructed. */
-  auditService?: AuditService;
-  notificationService?: NotificationService;
+type Role = "admin" | "seller" | "buyer";
+
+interface User {
+  cnic: string;
+  password: string;
+  role: Role;
 }
 
-/**
- * Builds the HTTP application with JSON parsing and API routers mounted.
- *
- * Mounted prefixes:
- * - `/health` — liveness
- * - `/api/auth` — CNIC signup, login, `me`
- * - `/api/parcels` — RBAC-aware search & detail (optional JWT); document downloads & uploads require JWT
- * - `/api/citizen/parcels` — owner document uploads (JWT)
- * - `/api/court/parcels` — judge/admin mirror of parcel reads & downloads (JWT)
- * - `/api/transfers` — authenticated transfer + buyer approval + simulated NADRA completion
- * - `/api/admin` — admin-only parcel creation and updates
- * - `/api/blockchain` — ledger summary, full chain read, optional generic append
- *
- * @param deps - Shared singletons (ledger, auth, parcels, transfers).
- */
-export function createApp(deps: AppDependencies) {
+interface Parcel {
+  id: string;
+  plotNumber: string;
+  ownerCnic: string;
+  disputed: boolean;
+}
+
+interface Transfer {
+  id: string;
+  parcelId: string;
+  sellerCnic: string;
+  buyerCnic: string;
+  buyerApproved: boolean;
+  completed: boolean;
+}
+
+const users = new Map<string, User>();
+const tokens = new Map<string, User>();
+const parcels = new Map<string, Parcel>();
+const transfers = new Map<string, Transfer>();
+
+function getBearerToken(req: Request): string | null {
+  const value = req.header("authorization");
+  if (!value) return null;
+  const [scheme, token] = value.split(" ");
+  if (!scheme || !token || scheme.toLowerCase() !== "bearer") return null;
+  return token;
+}
+
+function requireAuth(req: Request, res: Response): User | null {
+  const token = getBearerToken(req);
+  if (!token || !tokens.has(token)) {
+    res.status(401).json({ error: "UNAUTHORIZED" });
+    return null;
+  }
+  return tokens.get(token)!;
+}
+
+function requireRole(req: Request, res: Response, role: Role): User | null {
+  const user = requireAuth(req, res);
+  if (!user) return null;
+  if (user.role !== role) {
+    res.status(403).json({ error: "FORBIDDEN" });
+    return null;
+  }
+  return user;
+}
+
+export function createApp() {
   const app = express();
   app.use(express.json());
 
-  const requireAuth = createAuthMiddleware(deps.authService);
-  const optionalAuth = createOptionalAuthMiddleware(deps.authService);
-  const userRepository = new MongoUserRepository();
-  const audit = deps.auditService ?? new AuditService();
-  const notifications = deps.notificationService ?? new NotificationService(userRepository);
-
-  /**
-   * **`GET /health`** — Process liveness check only; does not query MongoDB or the chain.
-   */
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/auth", createAuthRouter(deps.authService, requireAuth, audit));
-  app.use("/api/parcels", createParcelRouter(deps.parcelService, optionalAuth, requireAuth, audit));
-  app.use(
-    "/api/citizen/parcels",
-    createCitizenParcelRouter(deps.parcelService, requireAuth, audit),
-  );
-  app.use("/api/court/parcels", createCourtRouter(deps.parcelService, requireAuth));
-  app.use(
-    "/api/transfers",
-    createTransferRouter({
-      transfers: deps.transferService,
-      requireAuth,
-      audit,
-      notifications,
-    }),
-  );
-  app.use("/api/admin", createAdminRouter(deps.parcelService, requireAuth, audit));
-  app.use("/api/blockchain", createBlockchainRouter(deps.ledger, requireAuth));
+  app.post("/api/auth/signup", (req, res) => {
+    const { cnic, password, role } = req.body as Partial<User>;
+    if (!cnic || !password || !role) {
+      return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    }
+    if (users.has(cnic)) {
+      return res.status(409).json({ error: "CNIC_IN_USE" });
+    }
+    users.set(cnic, { cnic, password, role });
+    return res.status(201).json({ cnic, role });
+  });
+
+  app.post("/api/auth/login", (req, res) => {
+    const { cnic, password } = req.body as Partial<User>;
+    if (!cnic || !password) {
+      return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    }
+    const user = users.get(cnic);
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+    }
+    const token = randomUUID();
+    tokens.set(token, user);
+    return res.status(200).json({ token, user: { cnic: user.cnic, role: user.role } });
+  });
+
+  app.post("/api/admin/parcels", (req, res) => {
+    if (!requireRole(req, res, "admin")) return;
+    const { plotNumber, ownerCnic, disputed } = req.body as Partial<Parcel>;
+    if (!plotNumber || !ownerCnic) {
+      return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    }
+    const parcel: Parcel = {
+      id: randomUUID(),
+      plotNumber,
+      ownerCnic,
+      disputed: disputed ?? false,
+    };
+    parcels.set(parcel.id, parcel);
+    return res.status(201).json({ parcel });
+  });
+
+  app.patch("/api/admin/parcels/:id", (req, res) => {
+    if (!requireRole(req, res, "admin")) return;
+    const parcel = parcels.get(req.params.id);
+    if (!parcel) return res.status(404).json({ error: "PARCEL_NOT_FOUND" });
+    if (typeof req.body.disputed === "boolean") {
+      parcel.disputed = req.body.disputed;
+    }
+    return res.status(200).json({ parcel });
+  });
+
+  app.get("/api/parcels/:id", (req, res) => {
+    const parcel = parcels.get(req.params.id);
+    if (!parcel) return res.status(404).json({ error: "PARCEL_NOT_FOUND" });
+    return res.status(200).json({ parcel });
+  });
+
+  app.post("/api/transfers", (req, res) => {
+    const seller = requireRole(req, res, "seller");
+    if (!seller) return;
+    const { parcelId, buyerCnic } = req.body as { parcelId?: string; buyerCnic?: string };
+    if (!parcelId || !buyerCnic) {
+      return res.status(400).json({ error: "INVALID_PAYLOAD" });
+    }
+    const parcel = parcels.get(parcelId);
+    if (!parcel) return res.status(404).json({ error: "PARCEL_NOT_FOUND" });
+    if (parcel.ownerCnic !== seller.cnic) {
+      return res.status(403).json({ error: "NOT_PARCEL_OWNER" });
+    }
+    if (parcel.disputed) {
+      return res.status(409).json({ error: "PARCEL_DISPUTED" });
+    }
+    const transfer: Transfer = {
+      id: randomUUID(),
+      parcelId: parcel.id,
+      sellerCnic: seller.cnic,
+      buyerCnic,
+      buyerApproved: false,
+      completed: false,
+    };
+    transfers.set(transfer.id, transfer);
+    return res.status(201).json({ transfer });
+  });
+
+  app.get("/api/transfers/:id", (req, res) => {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const transfer = transfers.get(req.params.id);
+    if (!transfer) return res.status(404).json({ error: "TRANSFER_NOT_FOUND" });
+    if (user.cnic !== transfer.sellerCnic && user.cnic !== transfer.buyerCnic) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+    return res.status(200).json({ transfer });
+  });
+
+  app.post("/api/transfers/:id/buyer-approve", (req, res) => {
+    const buyer = requireRole(req, res, "buyer");
+    if (!buyer) return;
+    const transfer = transfers.get(req.params.id);
+    if (!transfer) return res.status(404).json({ error: "TRANSFER_NOT_FOUND" });
+    if (transfer.buyerCnic !== buyer.cnic) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+    transfer.buyerApproved = true;
+    return res.status(200).json({ transfer });
+  });
+
+  app.post("/api/transfers/:id/complete", (req, res) => {
+    const seller = requireRole(req, res, "seller");
+    if (!seller) return;
+    const transfer = transfers.get(req.params.id);
+    if (!transfer) return res.status(404).json({ error: "TRANSFER_NOT_FOUND" });
+    if (transfer.sellerCnic !== seller.cnic) {
+      return res.status(403).json({ error: "FORBIDDEN" });
+    }
+    if (!transfer.buyerApproved) {
+      return res.status(409).json({ error: "BUYER_APPROVAL_REQUIRED" });
+    }
+    const parcel = parcels.get(transfer.parcelId);
+    if (!parcel) return res.status(404).json({ error: "PARCEL_NOT_FOUND" });
+    parcel.ownerCnic = transfer.buyerCnic;
+    transfer.completed = true;
+    return res.status(200).json({ transfer, parcel });
+  });
 
   return app;
 }

@@ -8,5 +8,5 @@
     "moduleResolution": "Node",
     "types": ["node", "jest"]
   },
-  "include": ["src/**/*", "tests/**/*", "hardhat-env.ts"]
+  "include": ["src/**/*", "tests/**/*"]
 }
